@@ -75,7 +75,15 @@ ENV PATH="/home/lifted/.cargo/bin:/home/lifted/.local/bin:${PATH}"
 
 # === Rust and pip for user ===
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
-    && cargo install cargo-watch && python3 -m pip install --user --upgrade pip
+    && cargo install cargo-watch \
+    && python3 -m pip install --user --upgrade pip \
+    && python3 -m pip install --user pyright
+
+# === Global Node.js LSP tools ===
+# Configure npm global prefix to a user-writable directory already on PATH
+# typescript-language-server requires typescript as a peer dependency
+RUN npm config set prefix /home/lifted/.local \
+    && npm install -g typescript-language-server typescript
 
 # Verification (visible in build output)
 RUN echo "Node: $(node --version)" \

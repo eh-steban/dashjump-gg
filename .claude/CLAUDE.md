@@ -56,6 +56,7 @@ See `.claude/rules/` for detailed standards:
 - `backend/` — Python, DDD architecture, testing
 - `frontend/` — React, TypeScript, visualization, testing
 - `parser/` — Rust conventions
+- `git.md` — Commit message conventions
 
 ## Infrastructure
 
