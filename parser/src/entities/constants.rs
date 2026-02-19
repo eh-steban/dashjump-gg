@@ -48,6 +48,10 @@ pub const CNPC_NEUTRAL_SINNERSSACRIFICE_ENTITY: u64 =
 pub const CNPC_BASE_DEFENSE_SENTRY_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_BaseDefenseSentry");
 pub const CNPC_SHIELDEDSENTRY_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_ShieldedSentry");
 
+// Projectile entities (appear as damage attackers, not tracked for position)
+pub const CPROJECTILE_PRIEST_SLIDETRAP_ENTITY: u64 =
+    fxhash::hash_bytes(b"CProjectile_Priest_SlideTrap_Projectile");
+
 // =============================================================================
 // Field Keys
 // =============================================================================

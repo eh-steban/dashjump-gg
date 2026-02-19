@@ -110,12 +110,20 @@ impl MyVisitor {
         Ok(())
     }
 
-    /// Check if entity should have its position tracked
+    /// Check if entity should have its position tracked.
+    /// Lane creeps (troopers) require a lane assignment to filter out pre-spawned units.
     fn should_track_position(&self, entity: &Entity) -> bool {
+        let hash = entity.serializer().serializer_name.hash;
+
+        // Lane creeps require a lane assignment (pre-spawned units have lane 0)
+        if hash == CNPC_TROOPER_ENTITY {
+            let lane: i32 = entity.get_value(&NPC_LANE_KEY).unwrap_or(0);
+            return lane != 0;
+        }
+
         matches!(
-            entity.serializer().serializer_name.hash,
+            hash,
             CCITADELPLAYERPAWN_ENTITY
-                | CNPC_TROOPER_ENTITY
                 | CNPC_TROOPERBOSS_ENTITY
                 | CNPC_TROOPERNEUTRAL_ENTITY
                 | CNPC_MIDBOSS_ENTITY
@@ -183,9 +191,7 @@ impl MyVisitor {
                         custom_id: lobby_player_slot.to_string(),
                         name: player_name,
                         steam_id_32: get_steam_id32(owner_entity).unwrap_or(999999),
-                        hero_id: owner_entity
-                            .get_value(&HERO_ID_KEY)
-                            .unwrap_or(999999),
+                        hero_id: owner_entity.get_value(&HERO_ID_KEY).unwrap_or(999999),
                         lobby_player_slot,
                         team: owner_entity.get_value(&TEAM_KEY).unwrap_or(999999),
                         lane: 999999,
@@ -225,13 +231,18 @@ impl MyVisitor {
         }
     }
 
-    /// Get entity ID for damage tracking (entity index for bosses, custom_id otherwise)
+    /// Get entity ID for damage tracking (entity index for bosses/projectiles, custom_id otherwise)
     fn get_damage_entity_id(&mut self, ctx: &Context, entity: &Entity) -> u32 {
         let hash = entity.serializer().serializer_name.hash;
         if hash == CCITADELPLAYERPAWN_ENTITY {
             return self.get_custom_id(ctx, entity);
         }
         if self.boss_tracker.is_boss_entity(hash) {
+            return entity.index() as u32;
+        }
+        // Projectiles appear as damage sources but aren't position-tracked entities.
+        // Use entity index to uniquely identify them without a fixed ID.
+        if hash == CPROJECTILE_PRIEST_SLIDETRAP_ENTITY {
             return entity.index() as u32;
         }
         self.get_custom_id(ctx, entity)
