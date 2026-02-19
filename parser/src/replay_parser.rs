@@ -1,19 +1,20 @@
 //! Main replay parser - coordinates parsing of Deadlock demo files
 
 use std::collections::HashMap;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::BufReader;
 
 use anyhow::Result;
 use haste::demofile::DemoFile;
 use haste::demostream::CmdHeader;
-use haste::entities::{ehandle_to_index, fkey_from_path, DeltaHeader, Entity};
+use haste::entities::{DeltaHeader, Entity, ehandle_to_index, fkey_from_path};
 use haste::parser::{Context, Parser, Visitor};
 use haste::valveprotos::deadlock::{
     CCitadelUserMessageDamage, CCitadelUserMsgPostMatchDetails, CMsgMatchMetaDataContents,
     CitadelUserMessageIds,
 };
 use haste::valveprotos::prost::Message;
+use tracing::{error, info};
 
 use crate::domain::{DamageRecord, Player, PlayerPosition};
 use crate::entities::constants::*;
@@ -171,12 +172,20 @@ impl MyVisitor {
                         .get_value(&LOBBY_PLAYER_SLOT_KEY)
                         .unwrap_or(999999);
 
+                    // String values in haste are now Box<[u8]> since not all demo strings are valid UTF-8
+                    let player_name: String = owner_entity
+                        .get_value::<Box<[u8]>>(&PLAYER_NAME_KEY)
+                        .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+                        .unwrap_or_else(|| "Unknown".to_string());
+
                     self.players.push(Player {
                         entity_id: entity.index().to_string(),
                         custom_id: lobby_player_slot.to_string(),
-                        name: owner_entity.get_value(&PLAYER_NAME_KEY).unwrap(),
+                        name: player_name,
                         steam_id_32: get_steam_id32(owner_entity).unwrap_or(999999),
-                        hero_id: owner_entity.get_value(&HERO_ID_KEY).unwrap_or(999999),
+                        hero_id: owner_entity
+                            .get_value(&HERO_ID_KEY)
+                            .unwrap_or(999999),
                         lobby_player_slot,
                         team: owner_entity.get_value(&TEAM_KEY).unwrap_or(999999),
                         lane: 999999,
@@ -205,6 +214,10 @@ impl MyVisitor {
             CNPC_SHIELDEDSENTRY_ENTITY => 31,
             CWORLD_ENTITY => 32,
             CCITADELPLAYERCONTROLLER_ENTITY => 33,
+            CNECRO_HAUNTINGSKULL_ENTITY => 34,
+            CNPC_NECROSKELE_ENTITY => 35,
+            CCITADEL_GRAVESTONE_BLOCKER_ENTITY => 36,
+            CNPC_BARRACKBOSS_ENTITY => 37, // This might replace CNPC_TROOPERBARRACKBOSS_ENTITY
             _ => panic!(
                 "Unknown entity - Name: {}, Hash: {}",
                 serializer_entity_name.str, serializer_entity_name.hash
@@ -429,11 +442,43 @@ impl Visitor for &mut MyVisitor {
 
 /// Parse a replay file and return match data as JSON
 pub fn parse_replay(replay_full_path: &str) -> Result<serde_json::Value> {
+    // Get file size for logging
+    let file_size = fs::metadata(replay_full_path).map(|m| m.len()).unwrap_or(0);
+    info!(
+        "[parse_replay] Starting parse of {} ({} bytes)",
+        replay_full_path, file_size
+    );
+
     let file = File::open(replay_full_path)?;
     let buf_reader = BufReader::new(file);
-    let demo_file = DemoFile::start_reading(buf_reader)?;
+
+    info!("[parse_replay] Opening demo file stream...");
+    let demo_file = DemoFile::start_reading(buf_reader).map_err(|e| {
+        error!("[parse_replay] Failed to open demo file stream: {:?}", e);
+        anyhow::anyhow!("Failed to open demo file stream: {:?}", e)
+    })?;
+    info!("[parse_replay] Demo file stream opened successfully");
+
     let mut visitor = MyVisitor::default();
-    let mut parser = Parser::from_stream_with_visitor(demo_file, &mut visitor)?;
-    parser.run_to_end()?;
+    info!("[parse_replay] Creating parser with visitor...");
+    let mut parser = Parser::from_stream_with_visitor(demo_file, &mut visitor).map_err(|e| {
+        error!("[parse_replay] Failed to create parser: {:?}", e);
+        anyhow::anyhow!("Failed to create parser: {:?}", e)
+    })?;
+    info!("[parse_replay] Parser created successfully");
+
+    info!("[parse_replay] Running parser to end of demo...");
+    parser.run_to_end().map_err(|e| {
+        error!("[parse_replay] Parser failed during run_to_end: {:?}", e);
+        anyhow::anyhow!("Parser failed during run_to_end: {:?}", e)
+    })?;
+
+    info!(
+        "[parse_replay] Parse complete. Match duration: {}s, Players: {}, Position frames: {}",
+        visitor.total_match_time_s,
+        visitor.players.len(),
+        visitor.positions.len()
+    );
+
     Ok(visitor.get_match_data_json())
 }

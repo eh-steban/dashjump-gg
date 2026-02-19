@@ -51,6 +51,7 @@ pub async fn download_if_needed(
         }
     };
 
+    let bytes_len = bytes.len();
     if let Err(e) = File::create(replay_path).and_then(|mut file| file.write_all(&bytes)) {
         error!("[parse_demo] Failed to write replay to file: {}", e);
         return Err((
@@ -58,6 +59,12 @@ pub async fn download_if_needed(
             Json(serde_json::json!({"error": format!("Failed to write file: {}", e)})),
         ));
     }
+
+    info!(
+        "[parse_demo] Download complete: {} ({} bytes)",
+        replay_path.display(),
+        bytes_len
+    );
 
     Ok(())
 }

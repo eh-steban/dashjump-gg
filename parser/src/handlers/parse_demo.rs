@@ -48,6 +48,8 @@ pub async fn parse_demo(Json(payload): Json<ParseRequest>) -> Response {
         Err((status, Json(val))) => return build_response(status, &val),
     };
 
+    info!("[parse_demo] Starting replay parsing for: {}", decompressed_path.display());
+
     // Use catch_unwind to handle panics from the haste library gracefully
     // This prevents crashes from replay format changes or library bugs
     let path_str = decompressed_path.to_str().unwrap().to_string();

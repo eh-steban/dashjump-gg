@@ -17,6 +17,12 @@ pub const DEADLOCK_GAMERULES_ENTITY: u64 = fxhash::hash_bytes(b"CCitadelGameRule
 pub const CCITADELPLAYERCONTROLLER_ENTITY: u64 = fxhash::hash_bytes(b"CCitadelPlayerController");
 pub const CCITADELPLAYERPAWN_ENTITY: u64 = fxhash::hash_bytes(b"CCitadelPlayerPawn");
 
+// Summonable entities
+pub const CNECRO_HAUNTINGSKULL_ENTITY: u64 = fxhash::hash_bytes(b"CNecro_HauntingSkullEntity");
+pub const CNPC_NECROSKELE_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_NecroSkele");
+pub const CCITADEL_GRAVESTONE_BLOCKER_ENTITY: u64 =
+    fxhash::hash_bytes(b"CCitadel_GraveStone_Blocker");
+
 // NPC entities
 pub const CNPC_TROOPER_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_Trooper");
 pub const CNPC_TROOPERBOSS_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_TrooperBoss");
@@ -28,7 +34,10 @@ pub const CITEMXP_ENTITY: u64 = fxhash::hash_bytes(b"CItemXP");
 pub const CCITADEL_DESTROYABLE_BUILDING_ENTITY: u64 =
     fxhash::hash_bytes(b"CCitadel_Destroyable_Building");
 pub const CNPC_BOSS_TIER2_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_Boss_Tier2");
+// this might be an old objective entity id, keeping it around for now
 pub const CNPC_TROOPERBARRACKBOSS_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_TrooperBarrackBoss");
+// this might be the new objective entity id...
+pub const CNPC_BARRACKBOSS_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_BarrackBoss");
 pub const CNPC_BOSS_TIER3_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_Boss_Tier3");
 
 // Neutral entities
@@ -52,6 +61,13 @@ pub const TEAM_KEY: u64 = fkey_from_path(&["m_iTeamNum"]);
 pub const ORIGINAL_LANE_ASSIGNMENT_KEY: u64 = fkey_from_path(&["m_nOriginalLaneAssignment"]);
 pub const ASSIGNED_LANE_KEY: u64 = fkey_from_path(&["m_nAssignedLane"]);
 pub const LANE_SWAP_LOCKED_KEY: u64 = fkey_from_path(&["m_bLaneSwapLocked"]);
-pub const HERO_ID_KEY: u64 = fkey_from_path(&["m_nHeroID"]);
+pub const HERO_ID_KEY: u64 = fkey_from_path(&["m_PlayerDataGlobal", "m_nHeroID"]);
 pub const LOBBY_PLAYER_SLOT_KEY: u64 = fkey_from_path(&["m_unLobbyPlayerSlot"]);
+
+// FIXME: This might be deprecated. When looking at haste inspector, ZipLineLaneColor
+// doesn't show up until fairly late in the game, it's hit or miss when it shows up,
+// and it seems to only show 0. I'm unsure how that's used or how lane color is set.
 pub const ZIPLINE_LANE_COLOR_KEY: u64 = fkey_from_path(&["m_eZipLineLaneColor"]);
+
+// NPC fields
+pub const NPC_LANE_KEY: u64 = fkey_from_path(&["m_iLane"]);

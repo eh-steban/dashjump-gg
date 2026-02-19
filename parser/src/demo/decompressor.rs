@@ -59,13 +59,22 @@ pub fn decompress_replay(
         }
     };
 
-    if let Err(e) = std::io::copy(&mut decoder, &mut decompressed_file) {
-        error!("[parse_demo] Failed to decompress file: {}", e);
-        return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": format!("Failed to decompress file: {}", e)})),
-        ));
-    }
+    let bytes_written = match std::io::copy(&mut decoder, &mut decompressed_file) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            error!("[parse_demo] Failed to decompress file: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("Failed to decompress file: {}", e)})),
+            ));
+        }
+    };
+
+    info!(
+        "[parse_demo] Decompression complete: {} ({} bytes)",
+        decompressed_path.display(),
+        bytes_written
+    );
 
     Ok(decompressed_path)
 }
