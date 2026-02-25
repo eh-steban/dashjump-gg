@@ -12,9 +12,6 @@
 	// The optional 'workspaceFolder' property is the path VS Code should open by default when
 	// connected. This is typically a file mount in .devcontainer/docker-compose.yml
 	"workspaceFolder": "/workspaces/dashjump-gg",
-	"mounts": [
-		"source=${localEnv:HOME}/.claude,target=/home/lifted/.claude,type=bind"
-	],
 	// Run as the non-root user created in Dockerfile
 	"remoteUser": "lifted",
 	// Features to add to the dev container. More info: https://containers.dev/features.
@@ -25,8 +22,8 @@
 	// "runServices": [],
 	// Uncomment the next line if you want to keep your containers running after VS Code shuts down.
 	// "shutdownAction": "none",
-	// Install dependencies after workspace is mounted
-	"postCreateCommand": "cd backend && pip3 install --user -r requirements.txt && cd ../frontend && npm install && npx playwright install chromium",
+	// Install dependencies and ensure host Claude Code config files exist
+	"postCreateCommand": "bash .devcontainer/setup.sh",
 	// Configure tool-specific properties.
 	"customizations": {
 		"vscode": {
@@ -40,7 +37,7 @@
 						"source.organizeImports": "explicit"
 					}
 				},
-				"python.defaultInterpreterPath": "/usr/local/bin/python",
+				"python.defaultInterpreterPath": "/usr/bin/python3",
 				"python.languageServer": "Pylance",
 				"python.analysis.typeCheckingMode": "standard",
 				"[javascript]": {
