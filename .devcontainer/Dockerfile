@@ -66,6 +66,7 @@ RUN add-apt-repository ppa:deadsnakes/ppa \
 # Create user early so Rust and pip install to user directories (avoids duplication)
 RUN useradd -m -u 1000 -s /bin/bash lifted \
     && mkdir -p /home/lifted/.local/bin \
+    && mkdir -p /home/lifted/.claude \
     && chown -R lifted:lifted /home/lifted
 
 # Switch to user for remaining setup

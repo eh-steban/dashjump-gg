@@ -1,2 +1,16 @@
+# Claude CLI transient/local files (not shared across team)
 .claude/settings.local.json
+.claude/debug/
+.claude/shell-snapshots/
+.claude/session-env/
+.claude/ide/
+.claude/file-history/
+.claude/todos/
+.claude/backups/
+.claude/.credentials.json
+
+# But DO commit project memory for team sharing
+# .claude/projects/ is not ignored
+# See .claude/projects/README.md for details
+
 parser/.cargo/config.toml

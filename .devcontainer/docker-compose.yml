@@ -10,7 +10,11 @@ services:
       - ../dashjump-gg:/workspaces/dashjump-gg:cached
       # Persist cargo cache for faster Rust builds
       - cargo-cache:/home/lifted/.cargo/registry
-      - cargo-cache:/home/lifted/.cargo/git
+      # Persist chats and MCP/plugins
+      - ~/.claude/projects/-workspaces-dashjump-gg:/home/lifted/.claude/projects/-workspaces-dashjump-gg
+      - ~/.claude/plugins:/home/lifted/.claude/plugins
+      - ~/.claude/.credentials.json:/home/lifted/.claude/.credentials.json
+      - ~/.claude/settings.json:/home/lifted/.claude/settings.json
 
     # Required for Rust debugger (ptrace-based)
     cap_add:
@@ -37,3 +41,4 @@ services:
 
 volumes:
   cargo-cache:
+  claude-home:
