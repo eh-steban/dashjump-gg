@@ -96,3 +96,48 @@ See `.claude/rules/` for error handling and observability standards:
 | Backend | Exception hierarchy + HTTPException mapping | Python logging to stdout |
 | Frontend | AppError type + Error Boundaries | Console (minimal) |
 | Parser | Result<T, E> + custom error types | tracing crate |
+
+## Workflow
+
+This project uses a Product Kata-driven development workflow.
+
+### Key Locations
+- Product strategy: `private/product/strategy/`
+- Active experiments: `private/product/experiments/` (find `Status: active-experiment`)
+- Feature specs: `private/specs/`
+- Machine-switch state: `private/CONTEXT.md` (read at session start only)
+
+### Knowledge Management
+- Before starting work, check `private/learnings-index.md` for relevant cross-project learnings
+- Full knowledge management rules: `.claude/knowledge-management.md`
+- Service mental models: `.claude/rules/[service]/[service]-mental-model.md`
+- If you discover a cross-project pattern, append to `private/learnings.md` ## Drafts section
+- Run `/consolidate-learnings` weekly to promote drafts (spec-writer agent)
+
+### Shared File Ownership
+- Strategy files (`vision.md`, `current-options.md`): spec-writer agent only
+- `private/learnings-index.md`: spec-writer only (updated during `/consolidate-learnings`)
+- `private/learnings.md` (promoted entries): spec-writer only
+- `private/learnings.md` ## Drafts: any service agent may append
+
+### Definition of Done (applies to ALL work)
+Every completed unit of work must meet these standards:
+- Code reviewed (use code-reviewer agent or self-review for quick-fixes)
+- Tests written and passing for new/changed code
+- Observability: logging instrumented per service conventions
+- Security: no violations of dashjump-compliance skill checklist
+- Conventions: follows relevant `.claude/rules/[service]/CLAUDE.md` patterns
+
+### Development Principles
+- NEVER build without a linked experiment defining the outcome we're targeting
+- Specs require task shards — atomic units a subagent can execute independently
+- Each experiment step must be ≤ 1 week
+- Use `/kata-check` weekly to review experiment progress
+- Use `/quick-fix` for bugs and small changes (skip experiment/spec ceremony)
+
+### Before Starting Any Feature Work
+1. Check `private/product/experiments/` for the active experiment
+2. Read the current experiment's `kata.md` — what step are we on?
+3. If building: find the spec in `private/specs/` with task shards
+4. Work from a single task shard — don't load the full spec into context
+5. After completing a shard: run the "Verify before proceeding" check
