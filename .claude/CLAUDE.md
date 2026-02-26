@@ -68,7 +68,7 @@ See `.claude/rules/infra/` for infrastructure and deployment:
 - `ci-cd.md` — GitHub Actions workflows, testing strategy
 - `deployment.md` — Production deployment, Kubernetes, scaling
 
-### Quick Reference
+### Environment Quick Reference
 
 | Environment | Status | Purpose |
 |-------------|--------|---------|
@@ -89,7 +89,7 @@ See `.claude/rules/` for error handling and observability standards:
 - `parser/error-handling.md` — Rust Result types, eliminating panics
 - `parser/observability.md` — Tracing setup, log levels
 
-### Quick Reference
+### Service Quick Reference
 
 | Service | Error Strategy | Logging |
 |---------|----------------|---------|
@@ -141,3 +141,13 @@ Every completed unit of work must meet these standards:
 3. If building: find the spec in `private/specs/` with task shards
 4. Work from a single task shard — don't load the full spec into context
 5. After completing a shard: run the "Verify before proceeding" check
+
+### Context Budgets (enforce when creating/updating files)
+- Root CLAUDE.md: ≤200 lines (~2,000 tokens)
+- Subdirectory CLAUDE.md: ≤100 lines each
+- Spec task shards: ≤2,000 tokens per shard
+- Skills: keep under 5,000 tokens each
+- Experiment kata.md: move completed steps to learnings.md to prevent bloat
+- MCP servers: maximum 3 active simultaneously
+- Clear at 30%: Don't wait for context to fill. Quality degrades noticeably past 30%.
+- Subdirectory CLAUDE.md: ≤100 lines each. Lazy-loaded only when Claude reads files in that subtree.
