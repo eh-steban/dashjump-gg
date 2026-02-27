@@ -5,6 +5,9 @@ Esports analytics platform for Deadlock. Monorepo with three microservices.
 ## Quick Reference
 
 ```bash
+# Full stack (all services + database)
+docker-compose up
+
 # Service-specific commands in each service's CLAUDE.md
 ```
 

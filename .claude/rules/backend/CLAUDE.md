@@ -71,6 +71,9 @@ backend/
 └── requirements.txt
 ```
 
+> **Navigation note:** This shows the target DDD architecture. Current layout diverges:
+> `domain/` files are directly in `domain/` (no `models/` subdir) · Services at `app/services/` · Repos at `app/repo/` · `infra/external/` → `infra/deadlock_api/`
+
 ## Commands
 
 ```bash

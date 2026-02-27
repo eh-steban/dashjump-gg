@@ -12,32 +12,27 @@ parser/
 │   ├── replay_parser.rs      # Core parsing coordinator (~400 lines)
 │   │
 │   ├── domain/               # Data Structures (pure, serializable)
-│   │   ├── mod.rs
 │   │   ├── player.rs         # Player, PlayerPosition
 │   │   ├── boss.rs           # BossSnapshot
 │   │   ├── damage.rs         # DamageRecord
 │   │   └── creep.rs          # CreepWaveSnapshot, CreepWaveData
 │   │
 │   ├── entities/             # Entity Identification
-│   │   ├── mod.rs
 │   │   └── constants.rs      # Entity hashes, field keys (fkey_from_path)
 │   │
 │   ├── tracking/             # Stateful Trackers
-│   │   ├── mod.rs
-│   │   └── boss_tracker.rs   # BossTracker (spawn/despawn lifecycle)
+│   │   ├── boss_tracker.rs   # BossTracker (spawn/despawn lifecycle)
+│   │   └── creep_tracker.rs  # CreepTracker (wave state tracking)
 │   │
 │   ├── utils/                # Pure Helper Functions
-│   │   ├── mod.rs
 │   │   ├── entity_position.rs # get_entity_position()
 │   │   └── steam_id.rs       # steamid64_to_accountid()
 │   │
 │   ├── handlers/             # HTTP Route Handlers
-│   │   ├── mod.rs
 │   │   ├── check_demo.rs
 │   │   └── parse_demo.rs
 │   │
 │   └── demo/                 # Demo File Operations
-│       ├── mod.rs
 │       ├── downloader.rs
 │       └── decompressor.rs
 │
@@ -72,18 +67,17 @@ parser/
 ## Commands
 
 ```bash
-# Run server w/ hot reload
-cd parser
+# Dev server (hot reload) — run from parser/
 cargo watch -i src/compressed-replays/ -i src/replays/ -x run
 
-# # Run tests
-# cargo test
+# Tests
+cargo test
 
-# # Linting
-# cargo clippy
+# Lint
+cargo clippy
 
-# # Format
-# cargo fmt
+# Format check
+cargo fmt --check
 
 # Build release
 cargo build --release
@@ -91,21 +85,13 @@ cargo build --release
 
 ## Data Flow
 
-1. Backend sends replay file URL or data to parser
+1. Backend sends replay file URL to parser (port `9000`)
 2. Parser extracts match data from demo file
 3. Parser compresses and returns positional and damage data
 4. Backend receives and transforms for storage
 
 ## Output Data
 
-The parser produces:
-- Per-second positional data
-- Damage events
-- Objective events
-- Player metadata
-
-Data is compressed before sending to backend.
-
-## Port
-
-Runs on port `9000` by default.
+Parser produces (compressed before sending to backend):
+- Per-second positional data, player metadata
+- Damage events, objective events, creep wave snapshots

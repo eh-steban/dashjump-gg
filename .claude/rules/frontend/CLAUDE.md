@@ -69,6 +69,9 @@ frontend/
 └── vite.config.ts                    # Includes Vitest config in `test` block
 ```
 
+> **Navigation note:** This shows the target architecture. Current layout diverges:
+> `matchAnalysis/` has 15+ components (CreepWave, LanePressure, Objectives, etc.) · No `hooks/` subdir yet · `domain/` has additional types (boss, creep, lanePressure, matchMetadata, etc.) · Required env var: `VITE_BACKEND_DOMAIN`
+
 ## Layer Dependency Rules
 
 ```
