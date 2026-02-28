@@ -229,16 +229,23 @@ parser-mental-model.md: [All the detailed content]
 | `private/learnings.md` ## Drafts | When pattern discovered | Any service agent | Append draft finding |
 | `private/learnings.md` (promoted) | Weekly via /consolidate-learnings | spec-writer only | Promote, deduplicate, prune |
 | `private/learnings-index.md` | During /consolidate-learnings | spec-writer only | Add/update index entries |
+| `.claude/rules/**/*.md` | During /consolidate-learnings when learnings graduate | spec-writer only | Capture permanent patterns |
 | Service mental models | After debugging reveals pattern | Claude + code review | Create or enhance |
-| Spec assumptions | When creating spec | spec-writer + user | Document dependencies |
+| Spec assumptions | When creating spec | spec-writer + Steven | Document dependencies |
 | Experiment learnings | When experiment reaches terminal status | Claude after `/kata-check` | Document outcome |
+| Code comments | Every PR touching that code | Code reviewer subagent | Keep current |
 
 ---
 
 ## Related Documents
 
+- Hybrid Workflow Plan: `private/plans/archived/dashjump-hybrid-workflow-plan.md`
 - Learnings Index: `private/learnings-index.md`
 - Learnings: `private/learnings.md`
 - Parser Mental Model: `.claude/rules/parser/parser-mental-model.md`
 - Backend Mental Model: `.claude/rules/backend/backend-mental-model.md`
 - Frontend Mental Model: `.claude/rules/frontend/frontend-mental-model.md`
+- Root CLAUDE.md: `.claude/CLAUDE.md`
+- Project Health Skill: `.claude/skills/dashjump-context-audit/SKILL.md`
+  - File ownership map: `.claude/skills/dashjump-context-audit/references/ownership-map.md`
+  - Context budgets (single source of truth): `.claude/skills/dashjump-context-audit/references/context-budgets.md`
