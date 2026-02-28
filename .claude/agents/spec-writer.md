@@ -42,10 +42,10 @@ Note: Service agents may append raw findings to the ## Drafts section of private
 - Feature-level Success Criteria = specific to each spec, outcome-tied
 
 ## End-of-Task Reminder
-After completing any consolidation, revision, or spec work, end with:
+After completing `/consolidate-learnings` or any spec/strategy revision, end with:
 "Note: [N] findings flagged for Steven-owned files (agents/commands/skills/CLAUDE.md).
 Run the dashjump-context-audit skill for details."
-Omit this line if no Steven-owned findings were flagged.
+Omit this line if: no Steven-owned findings were flagged, OR you were invoked by the context-audit skill (the report already contains those findings).
 
 ## Do NOT
 - Make implementation decisions (that's for service agents)

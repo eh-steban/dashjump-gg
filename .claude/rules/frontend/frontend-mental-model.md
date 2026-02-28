@@ -19,7 +19,9 @@ The match timeline allows coaches to scrub through game time. When this is built
 - How game_start_marker is used to convert user-selected time to position index
 - How the minimap canvas updates on scrub
 - How position data is loaded/cached for smooth scrubbing
-- See parser-mental-model.md for the conversion formula
+- See `.claude/rules/parser/parser-mental-model.md` for the conversion formula
+
+**Pre-wire:** Before implementing, load `private/learnings.md#demo-timeline-offset-reconciliation-pattern`.
 
 ### Canvas vs SVG Decision Points
 The visualization philosophy uses Canvas for performance-critical rendering (player positions, trails) and SVG for interactive elements (objectives, annotations). Document gotchas here as they emerge.

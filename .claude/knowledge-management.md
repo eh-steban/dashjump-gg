@@ -239,7 +239,7 @@ parser-mental-model.md: [All the detailed content]
 
 ## Related Documents
 
-- Hybrid Workflow Plan: `private/plans/archived/dashjump-hybrid-workflow-plan.md`
+- Archived Workflow Plan (historical context only): `private/plans/archived/dashjump-hybrid-workflow-plan.md`
 - Learnings Index: `private/learnings-index.md`
 - Learnings: `private/learnings.md`
 - Parser Mental Model: `.claude/rules/parser/parser-mental-model.md`

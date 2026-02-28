@@ -1,5 +1,8 @@
+Use the spec-writer agent for this command.
+Active experiment = the kata.md in private/product/experiments/ whose header contains `Status: active-experiment` or `Status: discovery`.
+
 Read the active experiment in private/product/experiments/ (find the one with
-Status: active-experiment or discovery) and answer the five Coaching Kata
+`Status: active-experiment` or `Status: discovery`) and answer the five Coaching Kata
 questions:
 
 1. What is the target condition?

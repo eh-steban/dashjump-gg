@@ -1,3 +1,5 @@
+Use the service agent appropriate to the files being changed (backend-python, frontend-react, rust-parser).
+
 Skip the full experiment/spec workflow for small changes (bug fixes, tweaks,
 minor improvements).
 
@@ -18,4 +20,5 @@ Process:
 2. Identify affected files
 3. Implement directly
 4. Run relevant tests
-5. Self-review for convention compliance
+5. Self-review against `.claude/skills/dashjump-compliance/SKILL.md` checklist.
+   For changes touching auth or data handling, also invoke the code-reviewer agent.

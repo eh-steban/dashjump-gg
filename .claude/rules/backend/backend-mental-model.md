@@ -1,32 +1,31 @@
 # Backend Mental Model
 
-## Status: TODO
+## S3 Storage Strategy
 
-This file is a stub. Populate it as architectural patterns and constraints are discovered in the backend service.
+**Status:** Evaluated (not yet implemented)
 
-## What Goes Here
+PostgreSQL JSONB storage fails at scale for match data. Each parsed match produces 15-18 MB of JSON. At this size, JSONB hits hard limits: slow queries, large row sizes, and expensive full-object updates.
 
-Service-specific architecture deep-dives that are:
-- Non-obvious constraints that would cause expensive debugging if not documented
-- Data transformation patterns unique to this service
-- Patterns emerging from code review that recur across multiple PRs
-- Interaction between DDD layers that isn't obvious from the code
+**Chosen architecture:**
+- Store raw + transformed match JSON in S3 (one object per match)
+- Keep lightweight metadata in PostgreSQL (`match_id`, `s3_key`, `duration_seconds`, `status`)
+- API layer fetches S3 object on cache miss; PostgreSQL answers metadata queries
 
-## Candidate Topics (to be expanded)
+**Why not differential encoding?**
+Differential encoding (storing deltas between frames) reduces storage size but adds read-time reconstruction complexity with no query performance benefit. S3 achieves storage efficiency without the reconstruction overhead.
 
-### S3 Storage Strategy
-The backend is evaluating S3/Parquet as a replacement for JSONB storage for large match data (~15-18 MB per match). See `private/learnings.md` — "S3 Storage Solves JSONB Bottleneck" for the cross-project summary.
+**Key constraint:** JSONB reserved for small metadata only. Any new large-data feature defaults to S3 storage pattern.
 
-When this is implemented, document here:
-- How match data is partitioned in S3
-- How PostgreSQL metadata relates to S3 objects
-- Cache key strategy
-- How the API layer retrieves and assembles responses
+**See:** `private/learnings.md` — "S3 Storage Solves JSONB Bottleneck" for the cross-project summary.
 
-### DDD Layer Gotchas
-(Populate as patterns emerge)
+---
 
-### Data Transformation Pipeline
+## DDD Layer Gotchas
+
+(Populate as patterns emerge from code review)
+
+## Data Transformation Pipeline
+
 (Populate after S3 migration is implemented — the mapper layer will have non-trivial logic)
 
 ---
