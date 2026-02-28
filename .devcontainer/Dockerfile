@@ -80,11 +80,10 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
     && python3 -m pip install --user --upgrade pip \
     && python3 -m pip install --user pyright
 
-# === Global Node.js LSP tools ===
-# Configure npm global prefix to a user-writable directory already on PATH
-# typescript-language-server requires typescript as a peer dependency
-RUN npm config set prefix /home/lifted/.local \
-    && npm install -g typescript-language-server typescript
+# Set npm global prefix via environment so it persists across all RUN layers
+ENV npm_config_prefix=/home/lifted/.local
+RUN npm install -g typescript-language-server typescript
+RUN curl -fsSL https://claude.ai/install.sh | bash
 
 # Verification (visible in build output)
 RUN echo "Node: $(node --version)" \
