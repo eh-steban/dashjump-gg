@@ -153,4 +153,9 @@ Every completed unit of work must meet these standards:
 - Experiment kata.md: move completed steps to learnings.md to prevent bloat
 - MCP servers: maximum 3 active simultaneously
 - Clear at 30%: Don't wait for context to fill. Quality degrades noticeably past 30%.
-- Subdirectory CLAUDE.md: ≤100 lines each. Lazy-loaded only when Claude reads files in that subtree.
+- Full budget reference: .claude/skills/dashjump-context-audit/references/context-budgets.md
+
+### Project Health Auditing
+- Run the dashjump-context-audit skill periodically to audit all .claude/ files
+- Ownership rules: .claude/skills/dashjump-context-audit/references/ownership-map.md
+- Quality criteria per file type: .claude/skills/dashjump-context-audit/references/
