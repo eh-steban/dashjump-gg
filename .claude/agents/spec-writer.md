@@ -41,6 +41,12 @@ Note: Service agents may append raw findings to the ## Drafts section of private
 - Experiment-level Definition of Done = outcome achieved, not feature shipped
 - Feature-level Success Criteria = specific to each spec, outcome-tied
 
+## End-of-Task Reminder
+After completing any consolidation, revision, or spec work, end with:
+"Note: [N] findings flagged for Steven-owned files (agents/commands/skills/CLAUDE.md).
+Run the dashjump-context-audit skill for details."
+Omit this line if no Steven-owned findings were flagged.
+
 ## Do NOT
 - Make implementation decisions (that's for service agents)
 - Write code (that's for service agents)
