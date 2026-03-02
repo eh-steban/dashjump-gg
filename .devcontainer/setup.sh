@@ -12,7 +12,11 @@ if [ ! -f "$SETTINGS_FILE" ]; then
 fi
 
 # Install backend dependencies
-cd backend && pip3 install --user -r requirements.txt
+cd /workspaces/dashjump-gg/backend && pip3 install --user -r requirements.txt
+
+# Install dev utilities (image processing for tooling scripts)
+pip3 install --user Pillow
 
 # Install frontend dependencies and Playwright browser
-cd ../frontend && npm install && npx playwright install chromium
+# chromium system deps are pre-installed in the Dockerfile image
+cd /workspaces/dashjump-gg/frontend && npm install && npx playwright install chromium
