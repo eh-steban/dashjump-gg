@@ -3,13 +3,13 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use haste::entities::{fkey_from_path, Entity};
+use haste::entities::{Entity, fkey_from_path};
 use haste::parser::Context;
 
 use crate::domain::BossSnapshot;
 use crate::entities::constants::{
-    CCITADEL_DESTROYABLE_BUILDING_ENTITY, CNPC_BOSS_TIER2_ENTITY, CNPC_BOSS_TIER3_ENTITY,
-    CNPC_TROOPERBARRACKBOSS_ENTITY, CNPC_TROOPERBOSS_ENTITY, TEAM_KEY,
+    CCITADEL_DESTROYABLE_BUILDING_ENTITY, CNPC_BARRACKBOSS_ENTITY, CNPC_BOSS_TIER2_ENTITY,
+    CNPC_BOSS_TIER3_ENTITY, CNPC_TROOPERBOSS_ENTITY, TEAM_KEY,
 };
 use crate::utils::get_entity_position;
 
@@ -53,7 +53,7 @@ impl BossTracker {
             guardian_hash: CNPC_TROOPERBOSS_ENTITY,
             shrine_hash: CCITADEL_DESTROYABLE_BUILDING_ENTITY,
             walker_hash: CNPC_BOSS_TIER2_ENTITY,
-            base_guardian_hash: CNPC_TROOPERBARRACKBOSS_ENTITY,
+            base_guardian_hash: CNPC_BARRACKBOSS_ENTITY,
             patron_hash: CNPC_BOSS_TIER3_ENTITY,
         }
     }

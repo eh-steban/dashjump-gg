@@ -34,9 +34,6 @@ pub const CITEMXP_ENTITY: u64 = fxhash::hash_bytes(b"CItemXP");
 pub const CCITADEL_DESTROYABLE_BUILDING_ENTITY: u64 =
     fxhash::hash_bytes(b"CCitadel_Destroyable_Building");
 pub const CNPC_BOSS_TIER2_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_Boss_Tier2");
-// this might be an old objective entity id, keeping it around for now
-pub const CNPC_TROOPERBARRACKBOSS_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_TrooperBarrackBoss");
-// this might be the new objective entity id...
 pub const CNPC_BARRACKBOSS_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_BarrackBoss");
 pub const CNPC_BOSS_TIER3_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_Boss_Tier3");
 

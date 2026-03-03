@@ -60,6 +60,8 @@ impl Default for MyVisitor {
 impl MyVisitor {
     /// Get final match data as JSON
     pub fn get_match_data_json(&self) -> serde_json::Value {
+        let creep_waves = self.creep_tracker.get_output();
+
         serde_json::json!({
             "total_match_time_s": self.total_match_time_s,
             "match_start_time_s": self.match_start_time_s,
@@ -67,7 +69,7 @@ impl MyVisitor {
             "players": self.players,
             "positions": self.positions,
             "bosses": self.boss_tracker.get_output(),
-            "creep_waves": self.creep_tracker.get_output(),
+            "creep_waves": creep_waves,
         })
     }
 
@@ -129,8 +131,8 @@ impl MyVisitor {
                 | CNPC_MIDBOSS_ENTITY
                 | CITEMXP_ENTITY
                 | CCITADEL_DESTROYABLE_BUILDING_ENTITY
+                | CNPC_BARRACKBOSS_ENTITY
                 | CNPC_BOSS_TIER2_ENTITY
-                | CNPC_TROOPERBARRACKBOSS_ENTITY
                 | CNPC_BOSS_TIER3_ENTITY
                 | CNPC_NEUTRAL_SINNERSSACRIFICE_ENTITY
                 | CNPC_BASE_DEFENSE_SENTRY_ENTITY
@@ -154,7 +156,15 @@ impl MyVisitor {
             return Ok(());
         }
 
-        let rounded: u32 = match_start_time_s_f.ceil() as u32;
+        let rounded: u32 = match_start_time_s_f.round() as u32;
+
+        if self.match_start_time_s.is_none() {
+            info!(
+                "[parse_replay] m_flGameStartTime first seen: raw={:.4}, rounded={}",
+                match_start_time_s_f, rounded
+            );
+        }
+
         self.match_start_time_s = Some(rounded);
 
         Ok(())
@@ -209,21 +219,19 @@ impl MyVisitor {
             CNPC_TROOPER_ENTITY => 20,
             CNPC_TROOPERBOSS_ENTITY => 21,
             CNPC_TROOPERNEUTRAL_ENTITY => 22,
-            CNPC_MIDBOSS_ENTITY => 23,
-            CITEMXP_ENTITY => 24,
-            CCITADEL_DESTROYABLE_BUILDING_ENTITY => 25,
-            CNPC_BOSS_TIER2_ENTITY => 26,
-            CNPC_TROOPERBARRACKBOSS_ENTITY => 27,
-            CNPC_BOSS_TIER3_ENTITY => 28,
-            CNPC_NEUTRAL_SINNERSSACRIFICE_ENTITY => 29,
+            CNPC_NEUTRAL_SINNERSSACRIFICE_ENTITY => 23,
+            CNPC_MIDBOSS_ENTITY => 24,
+            CITEMXP_ENTITY => 25,
+            CNPC_BARRACKBOSS_ENTITY => 26,
+            CCITADEL_DESTROYABLE_BUILDING_ENTITY => 27,
+            CNPC_BOSS_TIER2_ENTITY => 28,
+            CNPC_BOSS_TIER3_ENTITY => 29,
             CNPC_BASE_DEFENSE_SENTRY_ENTITY => 30,
             CNPC_SHIELDEDSENTRY_ENTITY => 31,
-            CWORLD_ENTITY => 32,
-            CCITADELPLAYERCONTROLLER_ENTITY => 33,
-            CNECRO_HAUNTINGSKULL_ENTITY => 34,
-            CNPC_NECROSKELE_ENTITY => 35,
-            CCITADEL_GRAVESTONE_BLOCKER_ENTITY => 36,
-            CNPC_BARRACKBOSS_ENTITY => 37, // This might replace CNPC_TROOPERBARRACKBOSS_ENTITY
+            CCITADELPLAYERCONTROLLER_ENTITY => 32,
+            CNECRO_HAUNTINGSKULL_ENTITY => 33,
+            CNPC_NECROSKELE_ENTITY => 34,
+            CCITADEL_GRAVESTONE_BLOCKER_ENTITY => 35,
             _ => panic!(
                 "Unknown entity - Name: {}, Hash: {}",
                 serializer_entity_name.str, serializer_entity_name.hash
@@ -307,12 +315,15 @@ impl Visitor for &mut MyVisitor {
                 });
             }
 
-            // Finalize current window
-            self.total_match_time_s = this_window;
             self.damage
                 .push(std::mem::replace(&mut self.damage_window, HashMap::new()));
             self.positions
                 .push(std::mem::replace(&mut self.positions_window, Vec::new()));
+            if this_window == 0 {
+                self.total_match_time_s = this_window;
+            } else {
+                self.total_match_time_s = this_window - 1;
+            }
         }
 
         Ok(())
@@ -485,7 +496,8 @@ pub fn parse_replay(replay_full_path: &str) -> Result<serde_json::Value> {
     })?;
 
     info!(
-        "[parse_replay] Parse complete. Match duration: {}s, Players: {}, Position frames: {}",
+        "[parse_replay] Parse complete. match_start_time_s={:?}, total_match_time_s={}, players={}, position_frames={}",
+        visitor.match_start_time_s,
         visitor.total_match_time_s,
         visitor.players.len(),
         visitor.positions.len()

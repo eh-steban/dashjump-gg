@@ -241,7 +241,7 @@ impl CreepTracker {
         clusters
     }
 
-    /// Get creep wave data for JSON serialization
+/// Get creep wave data for JSON serialization
     pub fn get_output(&self) -> CreepWaveData {
         let total_waves: usize = self.wave_timeline.values().map(|v| v.len()).sum();
         let non_null_waves: usize = self
