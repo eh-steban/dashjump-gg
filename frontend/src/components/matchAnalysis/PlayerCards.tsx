@@ -1,5 +1,6 @@
 import React from 'react';
 import { ParsedMatchData } from '../../domain/matchAnalysis';
+import { LanePressureData } from '../../domain/lanePressure';
 import { Region } from '../../domain/region';
 import { regions } from '../../data/regions';
 import {
@@ -8,12 +9,14 @@ import {
   DRTypeAggregateBySec,
 } from '../../domain/player';
 import pointInPolygon from 'point-in-polygon';
+import { getPlayerLanePressure } from '../../services/lanePressure';
 
 interface PlayerCardsProps {
   players: PlayerData[];
   perPlayerData: Record<string, PlayerMatchData>;
   currentTick: number;
   matchData: ParsedMatchData;
+  lanePressure: LanePressureData;
   normalizePosition: (x: number, y: number) => { normX: number; normY: number };
 }
 
@@ -31,6 +34,7 @@ const PlayerCards: React.FC<PlayerCardsProps> = ({
   players,
   perPlayerData,
   currentTick,
+  lanePressure,
   normalizePosition,
 }) => {
   return (
@@ -48,6 +52,11 @@ const PlayerCards: React.FC<PlayerCardsProps> = ({
           const team = player.team;
           const heroName = player.hero.name || `Hero ${player.hero_id}`;
           const heroImg = player.hero.images?.icon_hero_card_webp;
+          const pressureEntries = getPlayerLanePressure(
+            customId,
+            lanePressure,
+            currentTick
+          );
           const health = 0;
           // const health = playerPathState.health[currentTick];
           const { normX, normY } = normalizePosition(
@@ -125,6 +134,23 @@ const PlayerCards: React.FC<PlayerCardsProps> = ({
                   </div>
                   <div>
                     <strong>Current Region:</strong> {regionLabels.join(', ')}
+                  </div>
+                  <div>
+                    <strong>Lane Pressure:</strong>{' '}
+                    {pressureEntries.length === 0 ?
+                      <span className='text-gray-400'>—</span>
+                    : pressureEntries.map((entry, i) => {
+                        const color = entry.team === 2 ? '#FFA500' : '#0EA5E9';
+                        return (
+                          <React.Fragment key={`${entry.lane}_${entry.team}`}>
+                            {i > 0 && ', '}
+                            <span style={{ color }}>
+                              Lane {entry.lane} · {Math.round(entry.pressure * 100)}%
+                            </span>
+                          </React.Fragment>
+                        );
+                      })
+                    }
                   </div>
                   <div>
                     {Object.keys(victimDamageMap).length === 0 ?

@@ -6,7 +6,6 @@ import ObjectiveInfoPanel from '../components/matchAnalysis/ObjectiveInfoPanel';
 import TeamDisplay from '../components/matchAnalysis/TeamDisplay';
 import MatchTimeViewer from '../components/matchAnalysis/MatchTimeViewer';
 import DamageAnalysisSection from '../components/damageAnalysis/DamageAnalysisSection';
-import LanePressurePanel from '../components/matchAnalysis/LanePressurePanel';
 import { ErrorMessage } from '../components/common/ErrorMessage';
 import { useErrorHandler } from '../hooks/useErrorHandler';
 import { regions } from '../data/regions';
@@ -260,14 +259,10 @@ const MatchAnalysis = () => {
                   currentTick={currentTick}
                   normalizePosition={normalizePosition}
                   matchData={matchAnalysis.parsed_match_data}
+                  lanePressure={parsedMatchData.lane_pressure}
                 />
               </div>
               <div className='flex flex-col gap-2'>
-                <LanePressurePanel
-                  lanePressure={parsedMatchData.lane_pressure}
-                  currentTick={currentTick}
-                  players={players}
-                />
                 <Minimap
                   currentTick={currentTick}
                   setCurrentTick={setCurrentTick}
