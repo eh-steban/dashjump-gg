@@ -1,26 +1,27 @@
-import { useState, useEffect, useMemo, useRef } from "react";
-import { useParams } from "react-router-dom";
-import Minimap from "../components/matchAnalysis/Minimap";
-import PlayerCards from "../components/matchAnalysis/PlayerCards";
-import ObjectiveInfoPanel from "../components/matchAnalysis/ObjectiveInfoPanel";
-import TeamDisplay from "../components/matchAnalysis/TeamDisplay";
-import MatchTimeViewer from "../components/matchAnalysis/MatchTimeViewer";
-import DamageAnalysisSection from "../components/damageAnalysis/DamageAnalysisSection";
-import LanePressurePanel from "../components/matchAnalysis/LanePressurePanel";
-import { ErrorMessage } from "../components/common/ErrorMessage";
-import { useErrorHandler } from "../hooks/useErrorHandler";
-import { regions } from "../data/regions";
-import { DestroyedObjective } from "../domain/destroyedObjective";
-import { Hero, PlayerData, ScaledPlayerCoord } from "../domain/player";
-import { ScaledBossSnapshot } from "../domain/boss";
-import { useMatchAnalysis } from "../hooks/UseMatchAnalysis";
-import PrintHeroImageData from "../components/matchAnalysis/PrintHeroImageData";
-import { formatSecondstoMMSS } from "../utils/time";
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { useParams } from 'react-router-dom';
+import Minimap from '../components/matchAnalysis/Minimap';
+import PlayerCards from '../components/matchAnalysis/PlayerCards';
+import ObjectiveInfoPanel from '../components/matchAnalysis/ObjectiveInfoPanel';
+import TeamDisplay from '../components/matchAnalysis/TeamDisplay';
+import MatchTimeViewer from '../components/matchAnalysis/MatchTimeViewer';
+import DamageAnalysisSection from '../components/damageAnalysis/DamageAnalysisSection';
+import LanePressurePanel from '../components/matchAnalysis/LanePressurePanel';
+import { ErrorMessage } from '../components/common/ErrorMessage';
+import { useErrorHandler } from '../hooks/useErrorHandler';
+import { regions } from '../data/regions';
+import { DestroyedObjective } from '../domain/destroyedObjective';
+import { Hero, PlayerData, ScaledPlayerCoord } from '../domain/player';
+import { ScaledBossSnapshot } from '../domain/boss';
+import { useMatchAnalysis } from '../hooks/UseMatchAnalysis';
+import PrintHeroImageData from '../components/matchAnalysis/PrintHeroImageData';
+import { formatSecondstoMMSS } from '../utils/time';
+
 import {
   defaultMatchAnalysis,
   MatchAnalysisResponse,
   WORLD_BOUNDS,
-} from "../domain/matchAnalysis";
+} from '../domain/matchAnalysis';
 
 const MINIMAP_SIZE = 768;
 // FIXME: Use this value once we're confident in how our map
@@ -54,8 +55,17 @@ const worldToMinimapPixels = (x: number, y: number) => {
 const MatchAnalysis = () => {
   const { match_id } = useParams();
   // Fetch match analysis via ETag-aware hook
-  const { data: matchAnalysisData, loading, error: matchError, refetch } = useMatchAnalysis(Number(match_id));
-  const { error: heroError, handleError: handleHeroError, clearError: clearHeroError } = useErrorHandler();
+  const {
+    data: matchAnalysisData,
+    loading,
+    error: matchError,
+    refetch,
+  } = useMatchAnalysis(Number(match_id));
+  const {
+    error: heroError,
+    handleError: handleHeroError,
+    clearError: clearHeroError,
+  } = useErrorHandler();
 
   const matchAnalysis: MatchAnalysisResponse =
     matchAnalysisData ?? defaultMatchAnalysis;
@@ -67,8 +77,9 @@ const MatchAnalysis = () => {
   const playersData = parsedMatchData.players_data;
   // NOTE: Contains dmg/position data per player
   const perPlayerData = parsedMatchData.per_player_data;
+  const matchDuration = parsedMatchData.total_match_time_s;
   const [heroData, setHeroData] = useState<Hero[]>([
-    { id: 0, name: "Default", images: {} },
+    { id: 0, name: 'Default', images: {} },
   ]);
   const isMounted = useRef(false);
 
@@ -78,15 +89,15 @@ const MatchAnalysis = () => {
   // Timeline repeat functionality (for hold-to-scrub)
   const repeatRef = useRef<NodeJS.Timeout | null>(null);
 
-  const startRepeat = (direction: "back" | "forward") => {
+  const startRepeat = (direction: 'back' | 'forward') => {
     if (repeatRef.current) return;
     repeatRef.current = setInterval(() => {
       setCurrentTick((t) => {
-        if (direction === "back") {
+        if (direction === 'back') {
           if (t <= 0) return 0;
           return t - 1;
         } else {
-          if (t >= parsedMatchData.total_match_time_s) return parsedMatchData.total_match_time_s;
+          if (t >= matchDuration) return matchDuration;
           return t + 1;
         }
       });
@@ -118,7 +129,7 @@ const MatchAnalysis = () => {
     return playersData.map((player) => {
       const hero = heroIdToHero[player.hero_id] || {
         id: 0,
-        name: "Unknown",
+        name: 'Unknown',
         images: {},
       };
       // Enrich hero with specific image URLs
@@ -134,22 +145,8 @@ const MatchAnalysis = () => {
   }, [playersData, heroData]);
 
   const scaledPlayerCoords: ScaledPlayerCoord[] = useMemo(() => {
-    return Object.entries(perPlayerData).map(([customId, playerGameData]) => {
-      const pos = playerGameData.positions[currentTick];
-
-      // Return default [0,0] coordinates if position is missing
-      if (!pos) {
-        return {
-          customId,
-          x: 0,
-          y: 0,
-          z: 0,
-          is_npc: false,
-          left: 0,
-          top: 0,
-        };
-      }
-
+    return Object.entries(perPlayerData).map(([customId, playerMatchData]) => {
+      const pos = playerMatchData.positions[currentTick];
       const { left, top } = worldToMinimapPixels(pos.x, pos.y);
       return {
         customId,
@@ -175,17 +172,17 @@ const MatchAnalysis = () => {
   useEffect(() => {
     isMounted.current = true;
 
-    fetch("https://assets.deadlock-api.com/v2/heroes?only_active=true")
+    fetch('https://assets.deadlock-api.com/v2/heroes?only_active=true')
       .then((res) => res.json())
       .then((data) => {
         if (!isMounted.current) return;
-        console.log("Loaded hero data:", data);
+        console.log('Loaded hero data:', data);
         setHeroData(data);
         clearHeroError();
       })
       .catch((err) => {
         if (!isMounted.current) return;
-        console.error("Error fetching hero data:", err);
+        console.error('Error fetching hero data:', err);
         handleHeroError(err);
       });
 
@@ -206,7 +203,7 @@ const MatchAnalysis = () => {
         <div className='mx-auto max-w-4xl px-8 py-4'>
           <ErrorMessage
             error={matchError as Error}
-            title="Failed to Load Match Analysis"
+            title='Failed to Load Match Analysis'
             onRetry={refetch}
           />
         </div>
@@ -217,7 +214,7 @@ const MatchAnalysis = () => {
         <div className='mx-auto max-w-4xl px-8 py-4'>
           <ErrorMessage
             error={heroError}
-            title="Failed to Load Hero Data"
+            title='Failed to Load Hero Data'
           />
         </div>
       )}
@@ -236,84 +233,86 @@ const MatchAnalysis = () => {
             players={players}
             perPlayerData={perPlayerData}
             bossSnapshots={bossSnapshots}
-            totalMatchTime={parsedMatchData.total_match_time_s}
+            totalMatchTime={matchDuration}
           />
 
-      <MatchTimeViewer
-        currentTick={currentTick}
-        setCurrentTick={setCurrentTick}
-        total_match_time_s={parsedMatchData.total_match_time_s}
-        startRepeat={startRepeat}
-        stopRepeat={stopRepeat}
-      />
+          <MatchTimeViewer
+            currentTick={currentTick}
+            setCurrentTick={setCurrentTick}
+            total_match_time_s={matchDuration}
+            startRepeat={startRepeat}
+            stopRepeat={stopRepeat}
+          />
 
-      <div className='match-analysis'>
-        <div className='grid grid-cols-[1fr_47vw] gap-3'>
-          <div
-            title='InformationPanel'
-            className='box-border gap-2 border-2 border-black bg-gray-300'
-          >
-            <ObjectiveInfoPanel
-              destroyedObjectives={destroyedObjectivesSorted}
-              currentObjectiveIndex={currentObjectiveIndex}
-            />
-            <PlayerCards
-              players={players}
-              perPlayerData={perPlayerData}
-              currentTick={currentTick}
-              normalizePosition={normalizePosition}
-              matchData={matchAnalysis.parsed_match_data}
-            />
+          <div className='match-analysis'>
+            <div className='grid grid-cols-[1fr_47vw] gap-3'>
+              <div
+                title='InformationPanel'
+                className='box-border gap-2 border-2 border-black bg-gray-300'
+              >
+                <ObjectiveInfoPanel
+                  destroyedObjectives={destroyedObjectivesSorted}
+                  currentObjectiveIndex={currentObjectiveIndex}
+                />
+                <PlayerCards
+                  players={players}
+                  perPlayerData={perPlayerData}
+                  currentTick={currentTick}
+                  normalizePosition={normalizePosition}
+                  matchData={matchAnalysis.parsed_match_data}
+                />
+              </div>
+              <div className='flex flex-col gap-2'>
+                <LanePressurePanel
+                  lanePressure={parsedMatchData.lane_pressure}
+                  currentTick={currentTick}
+                  players={players}
+                />
+                <Minimap
+                  currentTick={currentTick}
+                  setCurrentTick={setCurrentTick}
+                  total_match_time_s={matchDuration}
+                  match_start_time_s={
+                    matchAnalysis.parsed_match_data.match_start_time_s
+                  }
+                  MINIMAP_SIZE={MINIMAP_SIZE}
+                  scaledBossSnapshots={scaledBossSnapshots}
+                  scaledPlayerCoords={scaledPlayerCoords}
+                  players={players}
+                  destroyedObjectivesSorted={destroyedObjectivesSorted}
+                  setCurrentObjectiveIndex={setCurrentObjectiveIndex}
+                  regions={regions}
+                  startRepeat={startRepeat}
+                  stopRepeat={stopRepeat}
+                  creepWaves={parsedMatchData.creep_waves}
+                  lanePressure={parsedMatchData.lane_pressure}
+                  worldToMinimapPixels={worldToMinimapPixels}
+                />
+              </div>
+            </div>
           </div>
-          <div className="flex flex-col gap-2">
-            <LanePressurePanel
-              lanePressure={parsedMatchData.lane_pressure}
-              currentTick={currentTick}
-              players={players}
-            />
-            <Minimap
-              currentTick={currentTick}
-              setCurrentTick={setCurrentTick}
-              total_match_time_s={matchAnalysis.parsed_match_data.total_match_time_s}
-              match_start_time_s={matchAnalysis.parsed_match_data.match_start_time_s}
-              MINIMAP_SIZE={MINIMAP_SIZE}
-              scaledBossSnapshots={scaledBossSnapshots}
-              scaledPlayerCoords={scaledPlayerCoords}
-              players={players}
-              destroyedObjectivesSorted={destroyedObjectivesSorted}
-              setCurrentObjectiveIndex={setCurrentObjectiveIndex}
-              regions={regions}
-              startRepeat={startRepeat}
-              stopRepeat={stopRepeat}
-              creepWaves={parsedMatchData.creep_waves}
-              lanePressure={parsedMatchData.lane_pressure}
-              worldToMinimapPixels={worldToMinimapPixels}
-            />
-          </div>
-        </div>
-      </div>
 
-      {/* Player combat type/health Table */}
-      {/*
+          {/* Player combat type/health Table */}
+          {/*
           The buttons that control the time windows has been removed, but I may have use for some of the
           code in here so I'm keeping it for now
         */}
-      {/* <PerPlayerWindowTable
+          {/* <PerPlayerWindowTable
           playerPaths={playerPaths}
           matchMetadata={matchMetadata}
           playerTime={playerTime}
           heros={heros}
         /> */}
 
-      {/* Damage Source Types Table */}
-      {/* <DamageSourceTypesTable
+          {/* Damage Source Types Table */}
+          {/* <DamageSourceTypesTable
           sourceDetails={matchMetadata.match_info.damage_matrix.source_details}
         /> */}
 
-      {/* Digestible Damage Matrix Table for Abrams (player_slot 1) */}
-      {/* <DamageMatrixTable matchMetadata={matchMetadata} /> */}
+          {/* Digestible Damage Matrix Table for Abrams (player_slot 1) */}
+          {/* <DamageMatrixTable matchMetadata={matchMetadata} /> */}
 
-      {/* <PrintHeroImageData heroData={heroData} /> */}
+          {/* <PrintHeroImageData heroData={heroData} /> */}
         </>
       )}
     </>
