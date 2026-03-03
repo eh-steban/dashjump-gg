@@ -231,7 +231,7 @@ const MatchAnalysis = () => {
           <DamageAnalysisSection
             players={players}
             perPlayerData={perPlayerData}
-            bossSnapshots={bossSnapshots}
+            bossSnapshots={scaledBossSnapshots}
             totalMatchTime={matchDuration}
           />
 
