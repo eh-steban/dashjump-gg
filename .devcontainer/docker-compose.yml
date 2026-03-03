@@ -10,11 +10,9 @@ services:
       - ../dashjump-gg:/workspaces/dashjump-gg:cached
       # Persist cargo cache for faster Rust builds
       - cargo-cache:/home/lifted/.cargo/registry
-      # Persist chats and MCP/plugins
-      - ~/.claude/projects/-workspaces-dashjump-gg:/home/lifted/.claude/projects/-workspaces-dashjump-gg
-      - ~/.claude/plugins:/home/lifted/.claude/plugins
-      - ~/.claude/.credentials.json:/home/lifted/.claude/.credentials.json
-      - ~/.claude/settings.json:/home/lifted/.claude/settings.json
+      # Mount entire Claude Code state dir so auth, settings, plugins, history, and
+      # onboarding markers all persist across container rebuilds.
+      - ~/.claude:/home/lifted/.claude
 
     # Required for Rust debugger (ptrace-based)
     cap_add:
@@ -41,4 +39,3 @@ services:
 
 volumes:
   cargo-cache:
-  claude-home:

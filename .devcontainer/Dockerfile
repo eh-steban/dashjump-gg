@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Playwright system dependencies
-# These are required for Chromium browser to run in browser tests
+# These are required for Chromium/Chrome to run in browser tests and playwright-mcp
 RUN apt-get update && apt-get install -y \
     libnss3 \
     libnspr4 \
@@ -40,6 +40,17 @@ RUN apt-get update && apt-get install -y \
     libasound2 \
     libpango-1.0-0 \
     libcairo2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Google Chrome stable
+# playwright-mcp uses channel:'chrome' which looks for system Chrome at /opt/google/chrome/chrome
+RUN curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
+        | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] \
+        http://dl.google.com/linux/chrome/deb/ stable main" \
+        > /etc/apt/sources.list.d/google-chrome.list \
+    && apt-get update \
+    && apt-get install -y google-chrome-stable \
     && rm -rf /var/lib/apt/lists/*
 
 # === Node.js 24 ===
