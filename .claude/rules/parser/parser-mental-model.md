@@ -178,6 +178,30 @@ If replay file cuts off early:
 
 ---
 
+## Entity Field Lookup Tools
+
+**Core rule: Never search proto files for game-engine entity field enums.**
+
+Deadlock protobufs (`valveprotos-rs`) only cover network messages — game events and netmessages. Game-engine field types and enum values (e.g., `m_NPCState` on `CNPC_Trooper`, `m_lifeState`) are embedded in the demo's SendTables, not in any `.proto` file.
+
+### The Correct Lookup Path
+
+1. **`uniquetypes` tool** (`haste` repo at `tools/uniquetypes/src/main.rs`) — Run against a `.dem` file to extract all unique type name identifiers from the SendTables. This reveals what Rust type backs a given field name (e.g., `ELifeState`, `ENPCState`).
+
+2. **`haste-inspector`** (repo: `blukai/haste-inspector`) — Interactive browser for entity fields in a live demo. Browse `CNPC_Trooper` directly to see field names, types, and current values.
+
+3. **`dezlock-dump`** — Runtime schema extractor that injects into a running Deadlock process and outputs `_all-enums.hpp` with all scoped enums and their integer values. Requires the game running; not usable in devcontainer.
+
+4. **`SteamDatabase/GameTracking-Deadlock`** — Community-maintained game file tracking on GitHub. Does NOT contain schema dumps; mainly tracks `.vpk` asset changes. Do not rely on this for enum values.
+
+### Reference Pattern
+
+The `lifestate.rs` example in haste (`LIFE_ALIVE=0, LIFE_DEAD=2`) shows the format. Observed `m_NPCState` values 2, 6, 12 on `CNPC_Trooper` suggest a Deadlock-specific enum — value 12 rules out the standard Source 2 `NPC_STATE` (0–7 range), meaning these must be extracted via SendTables tooling.
+
+**Cross-project summary:** `private/learnings.md` — "Deadlock Entity Field Enums Are Not in Protobufs"
+
+---
+
 ## References in Codebase
 
 | Location | Use |
