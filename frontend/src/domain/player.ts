@@ -63,7 +63,7 @@ export interface ScaledPlayerCoord extends PlayerPosition {
   top: number;
 }
 
-// All positions for one tick (can contain nulls if a player absent that tick)
+// All positions for one tick
 export type PositionWindow = PlayerPosition[];
 
 // Comes from parser
