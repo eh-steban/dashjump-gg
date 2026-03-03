@@ -88,12 +88,14 @@ impl MyVisitor {
         let lobby_slot: u32 = entity.get_value(&LOBBY_PLAYER_SLOT_KEY).unwrap_or(9999);
         for player in &mut self.players {
             if player.lobby_player_slot == lobby_slot {
-                // Prefer m_nAssignedLane (final lane after swaps)
+                // NOTE: Fields have been changed to int8 in the demo. Previously u32. This
+                // created a bug where we got none instead of the lane value. If we encounter
+                // an issue in the future where values aren't coming through the API from here
+                // let's check that we're using the correct type.
                 player.lane = entity
-                    .get_value(&ASSIGNED_LANE_KEY)
+                    .get_value::<i8>(&ASSIGNED_LANE_KEY)
                     .filter(|&v| v != 0)
-                    .or_else(|| entity.get_value(&ORIGINAL_LANE_ASSIGNMENT_KEY))
-                    .unwrap_or(999999);
+                    .unwrap_or(99);
 
                 // TODO: Lane color fix - need to capture zipline_lane_color at lock time
                 // Currently captured at player discovery which may be incorrect
@@ -104,7 +106,7 @@ impl MyVisitor {
         }
 
         // Check if all players have lane data now
-        let all_lanes_set = self.players.iter().all(|p| p.lane != 999999);
+        let all_lanes_set = self.players.len() >= 12 && self.players.iter().all(|p| p.lane != 99);
         if all_lanes_set {
             self.lane_data_updated = true;
         }
@@ -204,7 +206,10 @@ impl MyVisitor {
                         hero_id: owner_entity.get_value(&HERO_ID_KEY).unwrap_or(999999),
                         lobby_player_slot,
                         team: owner_entity.get_value(&TEAM_KEY).unwrap_or(999999),
-                        lane: 999999,
+                        lane: owner_entity
+                            .get_value::<i8>(&ASSIGNED_LANE_KEY)
+                            .filter(|&v| v != 0)
+                            .unwrap_or(99),
                         zipline_lane_color: owner_entity
                             .get_value(&ZIPLINE_LANE_COLOR_KEY)
                             .unwrap_or(999999),

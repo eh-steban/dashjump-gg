@@ -10,7 +10,7 @@ pub struct Player {
     pub hero_id: u32,
     pub lobby_player_slot: u32,
     pub team: u32,
-    pub lane: i32,
+    pub lane: i8,
     pub zipline_lane_color: u32,
 }
 
