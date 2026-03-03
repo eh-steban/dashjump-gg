@@ -26,8 +26,8 @@ class LanePressureCalculator:
         """Calculate pressure (0-1) based on wave position.
 
         Pressure represents how far into enemy territory the wave has pushed.
-        - Amber (team=2) pushes toward low Y (Sapphire base): pressure = 1.0 - normalized_y
-        - Sapphire (team=3) pushes toward high Y (Amber base): pressure = normalized_y
+        - Amber (team=2) base is at low Y; creeps push toward high Y (Sapphire base): pressure = normalized_y
+        - Sapphire (team=3) base is at high Y; creeps push toward low Y (Amber base): pressure = 1.0 - normalized_y
 
         Args:
             wave: CreepWaveSnapshot with x, y, team
@@ -37,10 +37,10 @@ class LanePressureCalculator:
         """
         normalized_y = (wave.y - WORLD_MIN) / WORLD_SPAN
 
-        if wave.team == 2:  # Amber pushes toward low Y
-            return 1.0 - normalized_y
-        else:  # Sapphire (team 3) pushes toward high Y
+        if wave.team == 2:  # Amber base at low Y, pushes toward high Y
             return normalized_y
+        else:  # Sapphire base at high Y, pushes toward low Y
+            return 1.0 - normalized_y
 
     @staticmethod
     def attribute_players(

@@ -1,5 +1,7 @@
-from sqlmodel import SQLModel
 from typing import Optional
+
+from sqlmodel import SQLModel
+
 
 # PlayerInfo is pulled from Deadlock API (match_metadata call) and account_id
 # is a 32-bit steam_id. The regular/web steam_id is 64-bit.
@@ -15,10 +17,12 @@ class PlayerInfo(SQLModel):
     # lane: int
     # zipline_lane_color: int
 
+
 # TODO: Might not be needed anymore...
 class NPC(SQLModel):
     entity_id: str  # Ensure this stays a string for TransformService
     name: str
+
 
 class PlayerData(SQLModel):
     entity_id: str
@@ -31,6 +35,7 @@ class PlayerData(SQLModel):
     lane: int
     zipline_lane_color: Optional[int] = None
     # player_info: PlayerInfo
+
 
 class DamageRecord(SQLModel):
     damage: Optional[int] = None
@@ -51,10 +56,12 @@ class DamageRecord(SQLModel):
     hits: Optional[int] = None
     health_lost: Optional[int] = None
 
+
 DamageWindow = dict[str, list[DamageRecord]]
-Damage = list[Optional[DamageWindow]]
+Damage = list[DamageWindow]
 ParsedVictimDamage = DamageWindow
 ParsedAttackerVictimMap = dict[str, ParsedVictimDamage]
+
 
 class PlayerPosition(SQLModel):
     custom_id: str
@@ -63,8 +70,10 @@ class PlayerPosition(SQLModel):
     z: float
     is_npc: bool
 
-PositionWindow = list[Optional[PlayerPosition]]
+
+PositionWindow = list[PlayerPosition]
 Positions = list[PositionWindow]
+
 
 # TODO: Need to include Health, Combat Type, and Move Type
 class PlayerMatchData(SQLModel):
