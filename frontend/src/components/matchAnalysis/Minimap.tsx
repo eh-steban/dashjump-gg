@@ -1,19 +1,19 @@
-import { useRef, useState, useEffect, Dispatch, SetStateAction } from "react";
-import Grid from "./Grid";
-import Objectives from "./Objectives";
-import RegionToggle from "./RegionToggle";
-import RegionsMapping from "./RegionsMapping";
-import PlayerPositions from "./PlayerPositions";
-import CreepWaveLayer from "./CreepWaveLayer";
-import { Region } from "../../domain/region";
-import { ScaledPlayerCoord, PlayerData } from "../../domain/player";
-import { ScaledBossSnapshot } from "../../domain/boss";
-import { DestroyedObjective } from "../../domain/destroyedObjective";
-import { CreepWaveData } from "../../domain/creep";
-import { LanePressureData } from "../../domain/lanePressure";
+import { useRef, useState, useEffect, Dispatch, SetStateAction } from 'react';
+import Grid from './Grid';
+import Objectives from './Objectives';
+import RegionToggle from './RegionToggle';
+import RegionsMapping from './RegionsMapping';
+import PlayerPositions from './PlayerPositions';
+import CreepWaveLayer from './CreepWaveLayer';
+import { Region } from '../../domain/region';
+import { ScaledPlayerCoord, PlayerData } from '../../domain/player';
+import { ScaledBossSnapshot } from '../../domain/boss';
+import { DestroyedObjective } from '../../domain/destroyedObjective';
+import { CreepWaveData } from '../../domain/creep';
+import { LanePressureData } from '../../domain/lanePressure';
 
 const MINIMAP_URL =
-  "https://assets-bucket.deadlock-api.com/assets-api-res/images/maps/minimap.png";
+  'https://assets-bucket.deadlock-api.com/assets-api-res/images/maps/minimap.png';
 
 const Minimap = ({
   currentTick,
@@ -43,7 +43,7 @@ const Minimap = ({
   regions: Region[];
   scaledPlayerCoords: ScaledPlayerCoord[];
   players: PlayerData[];
-  startRepeat: (direction: "back" | "forward") => void;
+  startRepeat: (direction: 'back' | 'forward') => void;
   stopRepeat: () => void;
   creepWaves: CreepWaveData;
   lanePressure: LanePressureData;
@@ -78,9 +78,7 @@ const Minimap = ({
   return (
     <>
       {/* Minimap and slider */}
-      <div
-        className='h-fit shadow shadow-black/50'
-      >
+      <div className='h-fit shadow shadow-black/50'>
         <div
           className={`pointer-events-none relative`}
           style={{ width: `${MINIMAP_SIZE}px`, height: `${MINIMAP_SIZE}px` }}
