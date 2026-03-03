@@ -1,13 +1,13 @@
-import React from "react";
-import { ParsedMatchData } from "../../domain/matchAnalysis";
-import { Region } from "../../domain/region";
-import { regions } from "../../data/regions";
+import React from 'react';
+import { ParsedMatchData } from '../../domain/matchAnalysis';
+import { Region } from '../../domain/region';
+import { regions } from '../../data/regions';
 import {
   PlayerData,
   PlayerMatchData,
   DRTypeAggregateBySec,
-} from "../../domain/player";
-import pointInPolygon from "point-in-polygon";
+} from '../../domain/player';
+import pointInPolygon from 'point-in-polygon';
 
 interface PlayerCardsProps {
   players: PlayerData[];
@@ -21,7 +21,7 @@ function getPlayerRegionLabels(x: number, y: number): string[] {
   const foundRegions: string[] = regions
     .filter((region: Region) => pointInPolygon([x, y], region.polygon))
     .map<string>((region): string => {
-      return region.label ? region.label : "None";
+      return region.label ? region.label : 'None';
     });
   return foundRegions;
 }
@@ -112,7 +112,7 @@ const PlayerCards: React.FC<PlayerCardsProps> = ({
               )}
               <div className='flex flex-1 flex-col gap-0.5'>
                 <div className='mb-0.5 text-[1.05em] font-semibold'>
-                  {heroName}{" "}
+                  {heroName}{' '}
                   <span className='text-[0.95em] font-normal text-gray-500'>
                     (Name: {player.name}, Slot: {player.lobby_player_slot},
                     Team: {team})
@@ -120,11 +120,11 @@ const PlayerCards: React.FC<PlayerCardsProps> = ({
                 </div>
                 <div className='flex flex-col gap-2.5 text-[0.97em]'>
                   <div>
-                    <strong>Health:</strong>{" "}
-                    {health !== undefined ? health : "-"}
+                    <strong>Health:</strong>{' '}
+                    {health !== undefined ? health : '-'}
                   </div>
                   <div>
-                    <strong>Current Region:</strong> {regionLabels.join(", ")}
+                    <strong>Current Region:</strong> {regionLabels.join(', ')}
                   </div>
                   <div>
                     {Object.keys(victimDamageMap).length === 0 ?
