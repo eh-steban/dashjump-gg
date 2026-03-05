@@ -1,3 +1,10 @@
+---
+paths:
+  - "frontend/src/**/*.ts"
+  - "frontend/src/**/*.tsx"
+  - "frontend/src/**/**/*.ts"
+  - "frontend/src/**/**/*.tsx"
+---
 # Frontend Error Handling
 
 React/TypeScript error handling patterns and standards.

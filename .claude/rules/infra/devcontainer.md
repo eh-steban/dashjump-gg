@@ -1,3 +1,10 @@
+---
+paths:
+  - ".devcontainer/*"
+  - "**/Dockerfile"
+  - "docker-compose.yaml"
+  - ".github/workflows/*"
+---
 # Development Container (Devcontainer)
 
 Unified development environment with Node.js, Python, and Rust.

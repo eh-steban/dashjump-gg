@@ -1,3 +1,10 @@
+---
+paths:
+  - "frontend/src/**/*.ts"
+  - "frontend/src/**/*.tsx"
+  - "frontend/src/**/**/*.ts"
+  - "frontend/src/**/**/*.tsx"
+---
 # Frontend Service
 
 React/TypeScript web application for viewing match analytics and visualizations.

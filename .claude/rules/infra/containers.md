@@ -1,3 +1,10 @@
+---
+paths:
+  - ".devcontainer/*"
+  - "**/Dockerfile"
+  - "docker-compose.yaml"
+  - ".github/workflows/*"
+---
 # Container Architecture
 
 Detailed documentation of container structure, optimization, and best practices.

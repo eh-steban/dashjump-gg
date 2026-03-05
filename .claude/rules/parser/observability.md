@@ -1,3 +1,8 @@
+---
+paths:
+  - "parser/src/*.rs"
+  - "parser/src/**/*.rs"
+---
 # Parser Observability
 
 Rust/Axum logging and monitoring guidelines.

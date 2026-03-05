@@ -1,3 +1,8 @@
+---
+paths:
+  - "parser/src/*.rs"
+  - "parser/src/**/*.rs"
+---
 # Parser Error Handling
 
 Rust/Axum error handling patterns and standards.

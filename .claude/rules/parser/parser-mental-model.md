@@ -1,3 +1,8 @@
+---
+paths:
+  - "parser/src/*.rs"
+  - "parser/src/**/*.rs"
+---
 # Parser Mental Model: replay File Architecture
 
 ## Core Concept

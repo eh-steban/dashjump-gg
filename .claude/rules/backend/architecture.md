@@ -1,3 +1,10 @@
+---
+paths:
+  - "backend/**/*.py"
+  - "backend/**/**/*.py"
+  - "backend/**/**/**/*.py"
+  - "backend/**/**/**/**/*.py"
+---
 # Backend Architecture Rules
 
 ## DDD Layer Structure

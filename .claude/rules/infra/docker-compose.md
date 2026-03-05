@@ -1,3 +1,10 @@
+---
+paths:
+  - ".devcontainer/*"
+  - "**/Dockerfile"
+  - "docker-compose.yaml"
+  - ".github/workflows/*"
+---
 # Docker Compose Configuration
 
 Local development orchestration with Docker Compose.

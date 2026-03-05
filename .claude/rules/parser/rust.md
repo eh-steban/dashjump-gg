@@ -1,3 +1,8 @@
+---
+paths:
+  - "parser/src/*.rs"
+  - "parser/src/**/*.rs"
+---
 # Rust Coding Standards
 
 ## General

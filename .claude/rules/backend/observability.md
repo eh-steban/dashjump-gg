@@ -1,3 +1,10 @@
+---
+paths:
+  - "backend/**/*.py"
+  - "backend/**/**/*.py"
+  - "backend/**/**/**/*.py"
+  - "backend/**/**/**/**/*.py"
+---
 # Backend Observability
 
 Python/FastAPI logging and monitoring guidelines.

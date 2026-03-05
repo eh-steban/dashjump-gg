@@ -1,3 +1,10 @@
+---
+paths:
+  - ".devcontainer/*"
+  - "**/Dockerfile"
+  - "docker-compose.yaml"
+  - ".github/workflows/*"
+---
 # Infrastructure Overview
 
 dashjump.gg infrastructure documentation and containerization strategy.

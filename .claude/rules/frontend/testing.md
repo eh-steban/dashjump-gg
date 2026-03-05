@@ -1,3 +1,10 @@
+---
+paths:
+  - "frontend/src/**/*.ts"
+  - "frontend/src/**/*.tsx"
+  - "frontend/src/**/**/*.ts"
+  - "frontend/src/**/**/*.tsx"
+---
 # Frontend Testing Standards
 
 ## Philosophy

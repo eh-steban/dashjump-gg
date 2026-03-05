@@ -1,3 +1,10 @@
+---
+paths:
+  - ".devcontainer/*"
+  - "**/Dockerfile"
+  - "docker-compose.yaml"
+  - ".github/workflows/*"
+---
 # Deployment Strategy
 
 Production deployment architecture and future plans.

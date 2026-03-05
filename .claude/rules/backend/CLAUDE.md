@@ -1,3 +1,10 @@
+---
+paths:
+  - "backend/**/*.py"
+  - "backend/**/**/*.py"
+  - "backend/**/**/**/*.py"
+  - "backend/**/**/**/**/*.py"
+---
 # Backend Service
 
 Python/FastAPI microservice that orchestrates data flow between the parser, external APIs, and storage.

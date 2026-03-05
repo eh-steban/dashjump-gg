@@ -1,3 +1,10 @@
+---
+paths:
+  - "backend/**/*.py"
+  - "backend/**/**/*.py"
+  - "backend/**/**/**/*.py"
+  - "backend/**/**/**/**/*.py"
+---
 # Backend Testing Standards
 
 ## Domain Tests
@@ -30,9 +37,9 @@ Test use cases with mocked infrastructure:
 ```python
 def test_get_match_returns_transformed_data(mock_repo, mock_mapper):
     mock_repo.get_by_id.return_value = some_orm_model
-    
+
     result = GetMatchUseCase(mock_repo, mock_mapper).execute(123)
-    
+
     mock_mapper.to_domain.assert_called_once()
 ```
 

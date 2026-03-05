@@ -1,3 +1,8 @@
+---
+paths:
+  - "parser/src/*.rs"
+  - "parser/src/**/*.rs"
+---
 # Parser Service
 
 Rust/Axum microservice that extracts match data from Deadlock replay (demo) files.

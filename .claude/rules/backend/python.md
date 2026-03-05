@@ -1,3 +1,10 @@
+---
+paths:
+  - "backend/**/*.py"
+  - "backend/**/**/*.py"
+  - "backend/**/**/**/*.py"
+  - "backend/**/**/**/**/*.py"
+---
 # Python Coding Standards
 
 ## General
