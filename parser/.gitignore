@@ -4,5 +4,4 @@ src/compressed-replays/*
 !src/compressed-replays/.gitkeep
 src/replays/*
 !src/replays/.gitkeep
-docker/.bash_history
 .env

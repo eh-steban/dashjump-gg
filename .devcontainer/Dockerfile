@@ -78,6 +78,8 @@ RUN add-apt-repository ppa:deadsnakes/ppa \
 RUN useradd -m -u 1000 -s /bin/bash lifted \
     && mkdir -p /home/lifted/.local/bin \
     && mkdir -p /home/lifted/.claude \
+    && touch /home/lifted/.bashrc \
+    && touch /home/lifted/.bash_history \
     && chown -R lifted:lifted /home/lifted
 
 # Switch to user for remaining setup

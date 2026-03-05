@@ -4,8 +4,6 @@
 */*/*/*/__pycache__/
 app/replays/*
 !app/replays/.gitkeep
-docker/.bash_aliases
-docker/.bash_history
 
 !docs/.gitkeep
 docs/psql_connection.md

@@ -9,6 +9,8 @@
 .claude/backups/
 .claude/.credentials.json
 
+.bash_aliases
+
 # But DO commit project memory for team sharing
 # .claude/projects/ is not ignored
 # See .claude/projects/README.md for details

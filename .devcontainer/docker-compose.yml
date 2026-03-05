@@ -13,6 +13,10 @@ services:
       # Mount entire Claude Code state dir so auth, settings, plugins, history, and
       # onboarding markers all persist across container rebuilds.
       - ~/.claude:/home/lifted/.claude
+      # File set aside just for container specific bashrc settings
+      - ~/.container-bashrc:/home/lifted/.bashrc
+      - ~/.bash_aliases:/home/lifted/.bash_aliases
+      - ~/.bash_history:/home/lifted/.bash_history
 
     # Required for Rust debugger (ptrace-based)
     cap_add:
