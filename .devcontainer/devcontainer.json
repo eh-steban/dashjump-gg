@@ -22,7 +22,9 @@
 	// "features": {},
 	// Forward Claude Code's OAuth callback port so the host browser can complete the login flow.
 	// Without this, auth redirects to localhost:45297 hit the host machine (not the container), and auth fails.
-	"forwardPorts": [45297],
+	"forwardPorts": [
+		45297
+	],
 	// Uncomment the next line if you want start specific services in your Docker Compose config.
 	// "runServices": [],
 	// Uncomment the next line if you want to keep your containers running after VS Code shuts down.
