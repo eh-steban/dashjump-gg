@@ -6,6 +6,7 @@ logger = get_logger(__name__)
 # Custom IDs below this threshold indicate human players
 HUMAN_PLAYER_ID_THRESHOLD = 20
 
+
 class PlayersDataService:
     """Aggregate per-player position and damage data from parsed match."""
 
@@ -31,6 +32,7 @@ class PlayersDataService:
         }
 
         # Aggregate in single timeline pass
+        # positions are game-relative (pre-game stripped by parser), so offset by match_start_time_s
         match_duration = parsed_match.total_match_time_s - parsed_match.match_start_time_s
 
         for tick in range(match_duration):

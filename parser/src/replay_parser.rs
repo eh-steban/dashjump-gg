@@ -148,7 +148,7 @@ impl MyVisitor {
     }
 
     /// Handle game rules entity to extract match start time
-    fn handle_game_rules(&mut self, entity: &Entity) -> Result<()> {
+    fn handle_game_rules(&mut self, entity: &Entity, tick: i32) -> Result<()> {
         debug_assert!(entity.serializer_name_heq(DEADLOCK_GAMERULES_ENTITY));
 
         let match_start_time_s_f: f32 =
@@ -162,8 +162,8 @@ impl MyVisitor {
 
         if self.match_start_time_s.is_none() {
             info!(
-                "[parse_replay] m_flGameStartTime first seen: raw={:.4}, rounded={}",
-                match_start_time_s_f, rounded
+                "[parse_replay] m_flGameStartTime first seen: tick={}, raw={:.4}, rounded={}",
+                tick, match_start_time_s_f, rounded
             );
         }
 
@@ -198,14 +198,18 @@ impl MyVisitor {
                         .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
                         .unwrap_or_else(|| "Unknown".to_string());
 
+                    let steam_id = get_steam_id32(owner_entity).unwrap_or(999999);
+                    let hero_id: u32 = owner_entity.get_value(&HERO_ID_KEY).unwrap_or(999999);
+                    let team: u32 = owner_entity.get_value(&TEAM_KEY).unwrap_or(999999);
+
                     self.players.push(Player {
                         entity_id: entity.index().to_string(),
                         custom_id: lobby_player_slot.to_string(),
                         name: player_name,
-                        steam_id_32: get_steam_id32(owner_entity).unwrap_or(999999),
-                        hero_id: owner_entity.get_value(&HERO_ID_KEY).unwrap_or(999999),
+                        steam_id_32: steam_id,
+                        hero_id,
                         lobby_player_slot,
-                        team: owner_entity.get_value(&TEAM_KEY).unwrap_or(999999),
+                        team,
                         lane: owner_entity
                             .get_value::<i8>(&ASSIGNED_LANE_KEY)
                             .filter(|&v| v != 0)
@@ -289,6 +293,7 @@ impl Visitor for &mut MyVisitor {
     fn on_tick_end(&mut self, ctx: &Context) -> Result<()> {
         let next_window = (((1 + ctx.tick()) as f32) * ctx.tick_interval()).round() as u32;
         let this_window = ((ctx.tick() as f32) * ctx.tick_interval()).round() as u32;
+
         let match_started =
             self.match_start_time_s.is_some() && (this_window >= self.match_start_time_s.unwrap());
 
@@ -297,11 +302,12 @@ impl Visitor for &mut MyVisitor {
         }
 
         if next_window != this_window {
-            // Build per-second boss health timeline
-            self.boss_tracker.build_health_window(this_window);
 
-            // Build per-second creep wave snapshots
-            self.creep_tracker.build_wave_window(this_window);
+            // Build per-second boss health and creep wave timelines using match-relative time
+            // (0-indexed from match second 0, matching the player positions array)
+            let match_window = this_window - self.match_start_time_s.unwrap();
+            self.boss_tracker.build_health_window(match_window);
+            self.creep_tracker.build_wave_window(match_window);
 
             // Collect positions for all tracked entities
             for (_index, entity) in ctx.entities().unwrap().iter() {
@@ -310,20 +316,20 @@ impl Visitor for &mut MyVisitor {
                 }
                 let position = get_entity_position(entity);
                 let custom_id = self.get_custom_id(ctx, entity);
+                let is_npc = self.is_npc_entity(entity);
 
                 self.positions_window.push(PlayerPosition {
                     custom_id: custom_id.to_string(),
                     x: position[0],
                     y: position[1],
                     z: position[2],
-                    is_npc: self.is_npc_entity(entity),
+                    is_npc,
                 });
             }
 
-            self.damage
-                .push(std::mem::replace(&mut self.damage_window, HashMap::new()));
+            self.damage.push(std::mem::take(&mut self.damage_window));
             self.positions
-                .push(std::mem::replace(&mut self.positions_window, Vec::new()));
+                .push(std::mem::take(&mut self.positions_window));
             if this_window == 0 {
                 self.total_match_time_s = this_window;
             } else {
@@ -342,24 +348,25 @@ impl Visitor for &mut MyVisitor {
     ) -> Result<()> {
         // Handle game rules for match start time
         if entity.serializer_name_heq(DEADLOCK_GAMERULES_ENTITY) {
-            self.handle_game_rules(entity)?;
+            self.handle_game_rules(entity, ctx.tick())?;
         }
 
         // Track boss and creep lifecycle
         let hash = entity.serializer().serializer_name.hash;
 
-        // Only track creeps after match has started to avoid pre-game entities
+        // Only track creeps after match has started to avoid pre-match entities
         let match_started = self.match_start_time_s.is_some();
 
         match delta_header {
             DeltaHeader::CREATE => {
                 if self.boss_tracker.is_boss_entity(hash) {
                     let custom_id = self.get_custom_id(ctx, entity);
+                    let match_time_s = self.total_match_time_s.saturating_sub(self.match_start_time_s.unwrap_or(0));
                     self.boss_tracker.handle_boss_create(
                         entity,
                         custom_id,
                         hash,
-                        self.total_match_time_s,
+                        match_time_s,
                     );
                 }
                 // Only track creeps after match starts
@@ -368,8 +375,9 @@ impl Visitor for &mut MyVisitor {
                 }
             }
             DeltaHeader::DELETE => {
+                let match_time_s = self.total_match_time_s.saturating_sub(self.match_start_time_s.unwrap_or(0));
                 self.boss_tracker
-                    .handle_boss_delete(entity, self.total_match_time_s);
+                    .handle_boss_delete(entity, match_time_s);
                 if CreepTracker::is_creep_entity(hash) {
                     self.creep_tracker.handle_creep_delete(entity.index());
                 }
@@ -409,10 +417,11 @@ impl Visitor for &mut MyVisitor {
             // Check if victim is a boss and record health sample
             let victim_hash = victim.unwrap().serializer().serializer_name.hash;
             if self.boss_tracker.is_boss_entity(victim_hash) {
+                let match_time_s = self.total_match_time_s.saturating_sub(self.match_start_time_s.unwrap_or(0));
                 self.boss_tracker.record_boss_damage(
                     msg.entindex_victim(),
                     ctx,
-                    self.total_match_time_s,
+                    match_time_s,
                 )?;
             }
 
