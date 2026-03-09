@@ -4,32 +4,81 @@
 
 ### Format
 
-Use a short imperative subject line, optionally followed by a brief body with bullet points for context.
-
 ```
-Add creep wave tracking to lane pressure analysis
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+**Example:**
+```
+feat(parser): add creep wave tracking to lane pressure analysis
 
 - Parse all four creep entities per wave
 - Expose wave data via /parse endpoint
 - Store snapshots at 1-second intervals
 ```
 
+---
+
+### Types
+
+Commits MUST use one of the following types:
+
+| Type | When to Use |
+|------|-------------|
+| `feat` | New user-facing feature (SemVer MINOR) |
+| `fix` | Bug fix (SemVer PATCH) |
+| `refactor` | Code restructuring without behavior change |
+| `perf` | Performance improvement |
+| `test` | Adding or updating tests |
+| `docs` | Documentation only |
+| `chore` | Tooling, dependencies, build process |
+| `ci` | CI/CD pipeline changes |
+
+---
+
+### Scope
+
+Scope is OPTIONAL. When included, it MUST describe the affected service or area in lowercase, enclosed in parentheses.
+
+```
+feat(parser): ...
+fix(frontend): ...
+chore(backend): ...
+```
+
+---
+
+### Breaking Changes
+
+Breaking changes MUST be indicated in one of two ways:
+
+1. Append `!` after the type/scope: `feat!: remove legacy parse endpoint`
+2. Include a `BREAKING CHANGE:` footer in the commit body
+
+---
+
 ### Rules
 
-- **No co-author attribution** — Never append `Co-Authored-By` or similar lines to commit messages
-- **No implementation details** — Describe *what* changed and *why*, not *how* it was implemented
-- **Keep it minimal** — Three to four bullet points is enough; don't pad with obvious or redundant points
+- Subject line MUST follow `<type>[optional scope]: <description>`
+- Type MUST be one from the types table above
+- Description MUST be written in imperative mood (e.g., "add", "fix", "remove")
+- Subject line MUST NOT exceed 72 characters total
+- Body SHOULD be preceded by a blank line
+- Body bullets SHOULD convey impact, not mechanics — three to four bullets is enough
+- MUST NOT append `Co-Authored-By` or any attribution lines
+- SHOULD NOT include implementation details — describe *what* changed and *why*, not *how*
+
+---
 
 ### What to Write
 
 | Good | Bad |
 |------|-----|
-| "Add lane pressure visualization" | "Add LanePressureChart component that uses useMemo to memoize the filtered creep wave data array" |
-| "Fix creep wave count off-by-one" | "Change `<= 4` to `< 4` in creep entity loop condition" |
-| "Expose boss state in parser output" | "Add `boss_snapshots: Vec<BossSnapshot>` field to ParsedMatchResponse struct and serialize with serde" |
-
-### Bullet Point Guidance
-
-- Use bullets only when there are genuinely distinct changes worth calling out
-- Aim for three to four bullets maximum
-- Each bullet should convey *impact*, not mechanics
+| `feat: add lane pressure visualization` | `feat: add LanePressureChart component that uses useMemo to memoize filtered array` |
+| `fix: correct creep wave count off-by-one` | `fix: change <= 4 to < 4 in creep entity loop condition` |
+| `feat(parser): expose boss state in output` | `feat(parser): add boss_snapshots: Vec<BossSnapshot> field and serialize with serde` |
+| `chore: upgrade parser dependencies` | `chore: run cargo update and bump serde from 1.0.195 to 1.0.197` |
