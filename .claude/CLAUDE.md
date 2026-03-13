@@ -49,27 +49,37 @@ Analytics should be organized by phase (definitions need refinement beyond time)
 ## Service Details
 
 See `.claude/rules/` for detailed standards:
-- `backend/CLAUDE.md` — Structure, commands, DDD layers
-- `frontend/CLAUDE.md` — Structure, commands, components
-- `parser/CLAUDE.md` — Structure, commands
+- `backend/CLAUDE.md` -- Structure, commands, DDD layers
+- `frontend/CLAUDE.md` -- Structure, commands, components
+- `parser/CLAUDE.md` -- Structure, commands
+
+## Agents
+
+Specialized subagents for autonomous work:
+- `backend-python` -- Python/FastAPI: endpoints, use cases, domain services, backend tests
+- `frontend-react` -- React/TypeScript: components, hooks, state, frontend tests
+- `spec-writer` -- Specs, experiment katas, strategy docs, learnings consolidation
+- `code-reviewer` -- Security, convention, logic, and test coverage review (read-only)
+- `test-auditor` -- Periodic test suite audit across all services (read-only)
+- `e2e-playwright` -- Cross-service end-to-end tests spanning full user flows
 
 ## Coding Standards
 
 See `.claude/rules/` for detailed standards:
-- `backend/` — Python, DDD architecture, testing
-- `frontend/` — React, TypeScript, visualization, testing
-- `parser/` — Rust conventions
-- `git.md` — Commit message conventions
+- `backend/` -- Python, DDD architecture, testing
+- `frontend/` -- React, TypeScript, visualization, testing
+- `parser/` -- Rust conventions
+- `git.md` -- Commit message conventions
 
 ## Infrastructure
 
 See `.claude/rules/infra/` for infrastructure and deployment:
-- `INFRA.md` — Infrastructure overview, environments, roadmap
-- `containers.md` — Docker images, multi-stage builds, optimization
-- `docker-compose.md` — Local development, networking, volumes
-- `devcontainer.md` — Unified development environment setup
-- `ci-cd.md` — GitHub Actions workflows, testing strategy
-- `deployment.md` — Production deployment, Kubernetes, scaling
+- `INFRA.md` -- Infrastructure overview, environments, roadmap
+- `containers.md` -- Docker images, multi-stage builds, optimization
+- `docker-compose.md` -- Local development, networking, volumes
+- `devcontainer.md` -- Unified development environment setup
+- `ci-cd.md` -- GitHub Actions workflows, testing strategy
+- `deployment.md` -- Production deployment, Kubernetes, scaling
 
 ### Environment Quick Reference
 
@@ -83,14 +93,14 @@ See `.claude/rules/infra/` for infrastructure and deployment:
 ## Error Handling & Observability
 
 See `.claude/rules/` for error handling and observability standards:
-- `error-handling.md` — Cross-service error philosophy, categories, sensitive data rules
-- `observability.md` — Logging standards, log levels, long-term roadmap
-- `backend/error-handling.md` — Python exception hierarchy, HTTP status mapping
-- `backend/observability.md` — Python logging setup, required log points
-- `frontend/error-handling.md` — Error types, Error Boundaries, graceful degradation
-- `frontend/observability.md` — Console logging guidelines, web-vitals
-- `parser/error-handling.md` — Rust Result types, eliminating panics
-- `parser/observability.md` — Tracing setup, log levels
+- `error-handling.md` -- Cross-service error philosophy, categories, sensitive data rules
+- `observability.md` -- Logging standards, log levels, long-term roadmap
+- `backend/error-handling.md` -- Python exception hierarchy, HTTP status mapping
+- `backend/observability.md` -- Python logging setup, required log points
+- `frontend/error-handling.md` -- Error types, Error Boundaries, graceful degradation
+- `frontend/observability.md` -- Console logging guidelines, web-vitals
+- `parser/error-handling.md` -- Rust Result types, eliminating panics
+- `parser/observability.md` -- Tracing setup, log levels
 
 ### Service Quick Reference
 
@@ -133,16 +143,16 @@ Every completed unit of work must meet these standards:
 
 ### Development Principles
 - NEVER build without a linked experiment defining the outcome we're targeting
-- Specs require task shards — atomic units a subagent can execute independently
+- Specs require task shards -- atomic units a subagent can execute independently
 - Each experiment step must be ≤ 1 week
 - Use `/kata-check` weekly to review experiment progress
 - Use `/quick-fix` for bugs and small changes (skip experiment/spec ceremony)
 
 ### Before Starting Any Feature Work
 1. Check `private/product/experiments/` for the active experiment
-2. Read the current experiment's `kata.md` — what step are we on?
+2. Read the current experiment's `kata.md` -- what step are we on?
 3. If building: find the spec in `private/specs/` with task shards
-4. Work from a single task shard — don't load the full spec into context
+4. Work from a single task shard -- don't load the full spec into context
 5. After completing a shard: run the "Verify before proceeding" check
 
 ### Context Budgets (enforce when creating/updating files)
