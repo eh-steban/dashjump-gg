@@ -11,6 +11,8 @@ paths:
 
 This single fact causes cascading implications for timeline handling, data indexing, and frame reconciliation throughout the entire system.
 
+**The parser filters pre-match frames and outputs match-relative arrays.** All output arrays (positions, boss health timeline, creep wave timeline) start at index 0 = match second 0. Consumers do not need to apply a `match_start_time_s` offset to index into positions[].
+
 ---
 
 ## Timeline Architecture
@@ -20,27 +22,33 @@ This single fact causes cascading implications for timeline handling, data index
 replay files contain data in a **replay time** coordinate system, but the match runs in a **match clock** coordinate system. They are not aligned.
 
 ```
-replay STREAM                    match STATE
-├── Time window 0 (replay_time=0)     Pre-match lobby starts
-│   └── positions[0]          Ignored by match
+replay STREAM                    PARSER BEHAVIOR             OUTPUT
+├── Time window 0 (replay_time=0)  [discarded - pre-match]   —
+│   Pre-match lobby starts
 |
-├── Time window 5                Waiting in lobby
-│   └── positions[5]       Ignored by match
+├── Time window 5                  [discarded - pre-match]   —
+│   Waiting in lobby
 │
-├── Time window 8                Laning phase starts ← match_clock = 0
-│   └── positions[8]       THIS is where match_clock=0
+├── Time window 8                  [emitted as positions[0]] positions[0]
+│   match starts ← match_clock = 0
+│
+├── Time window 9                  [emitted as positions[1]] positions[1]
+│   match_clock = 1
 │
 └── ...continued...
-   └── positions[i]           match_clock = (replay_time - match_start_offset)
+    Time window N                  [emitted as positions[N-8]] positions[N-8]
+    match_clock = N - match_start_time_s
 ```
 
-**Key insight:** There is an offset between array indices and match time.
+**Key insight:** The parser discards pre-match frames. Output array indices map directly to match seconds (positions[0] = match second 0).
 
 ---
 
 ## Reconciliation: match_start_time_s
 
-The parser extracts a `match_start_time_s` from the replay file. It does this by firing a entity update event updating `CCitadelGameRulesProxy` entity. The `m_pGameRules.m_flGameStartTime` field is updated and says how many seconds into the recording the match starts. Then we take that value, round down, and set `match_start_time_s`. We round down so if game start time is 7.75, we set start time to 7, player positions will be good enough, and then time resume from there.
+The parser extracts a `match_start_time_s` from the replay file. It does this by firing an entity update event updating the `CCitadelGameRulesProxy` entity. The `m_pGameRules.m_flGameStartTime` field is updated and says how many seconds into the recording the match starts. The value is rounded to the nearest integer (`f32::round()`). For example, if game start time is 7.75, `match_start_time_s` is set to 8.
+
+This value is used internally to gate frame emission (pre-match frames are discarded) and is exported as metadata in the output JSON. It is no longer needed by consumers to offset into positions[].
 
 ### What if match_start_time_s is wrong?
 
@@ -56,9 +64,10 @@ Timeline will be offset by N frames. Example:
 ## Data Structure: positions[] Array
 
 ```rust
-// positions[i] represents time window i of the replay STREAM, not match time
-// positions[0] through positions[match_start_time_s - 1] are pre-match noise
-// positions[match_start_time_s] onwards is actual match data
+// positions[i] represents match second i (0-indexed from match start)
+// positions[0] = match clock 0 (match starts)
+// positions.len() = total match duration in seconds
+// Pre-match frames are discarded by the parser before populating this array
 
 pub struct Position {
     entity_index: u32,
@@ -68,37 +77,37 @@ pub struct Position {
 }
 
 // Accessing:
-let time window_8 = positions[8];  // This is the START of the match
-let time window_10 = positions[10];  // This is 10 seconds into the match
+let match_start = &positions[0];   // Match second 0
+let two_minutes = &positions[120]; // Match second 120 (2:00 into match)
 ```
 
-**Critical constraint:** Array indices represent replay time windows, NOT match seconds.
+**Critical constraint:** Array indices are match-relative. positions[0] = match second 0. No offset required.
 
 ---
 
 ## Common Mistakes & Why They Fail
 
-### ****STUB**** Mistake 1: Explanation
+### Mistake 1: Applying match_start_time_s as an offset on the consumer side
 
 ```python
-# ❌ WRONG - **explanation**
+# ❌ WRONG - applying the old offset pattern; positions[] is already match-relative
 for i in range(len(positions)):
-    match_time_seconds = i / FRAMES_PER_SECOND
+    if i < match_start_time_s:
+        continue  # Skipping entries that don't exist — positions[0] IS match second 0
+    match_time_seconds = i - match_start_time_s
     record_position(match_time_seconds, positions[i])
 
-# Result: Timeline is off by ~266 seconds for a typical match start
+# Result: Skips the first match_start_time_s seconds of real match data
 ```
 
-**Why it fails:** The replay file starts recording before the match begins. You're counting pre-match time windows as match time.
+**Why it fails:** The parser already discards pre-match frames. positions[0] IS match second 0. Applying the offset again skips real match data.
 
 **How to fix:**
 ```python
-# ✅ CORRECT - **explanation**
-for i in range(len(positions)):
-    if i < match_start_time_s:
-        continue  # Skip pre-match
-    match_time_seconds = (i - match_start_time_s) / FRAMES_PER_SECOND
-    record_position(match_time_seconds, positions[i])
+# ✅ CORRECT - index directly; positions are already match-relative
+for i, position_frame in enumerate(positions):
+    match_time_seconds = i  # i == match second directly
+    record_position(match_time_seconds, position_frame)
 ```
 
 ---
@@ -107,10 +116,21 @@ for i in range(len(positions)):
 
 ### Time window 0 Semantics
 ```
-positions[0] = First replay time window (pre-match lobby)
-positions[0] ≠ match clock 0
-positions[match_start_time_s] = match clock 0
+positions[0] = match clock 0 (match starts)
+positions[i] = match clock i (i seconds into the match)
+positions.len() = total match duration in seconds
 ```
+The parser discards all frames before `match_start_time_s` before appending to positions[].
+
+---
+
+## total_match_time_s: Current Behavior and Known Rough Edge
+
+The `total_match_time_s` field in the output JSON stores **replay-absolute time** (the raw replay clock second of the last frame processed), not the match duration in seconds. This is a known rough edge that will be addressed in the upcoming parser repo switch.
+
+**To get match duration:** Use `positions.len()` directly.
+
+**Approximation:** `total_match_time_s - match_start_time_s` approximates match duration in seconds.
 
 ---
 
@@ -126,11 +146,11 @@ replay File
     └── Compress and send to backend
 
 [Backend]
-    ├── Receives positions[] with match_start_time_s
-    ├── Stores in S3 as-is (preserves full timeline)
+    ├── Receives positions[] (match-relative; positions[0] = match second 0)
+    ├── Stores in S3 as-is
     └── Creates indexed JSON:
         {
-            "match_start_time_s": 8,
+            "match_start_time_s": 8,  // metadata only -- not an index offset
             "positions": [...],
             "damage_events": [...]
         }
@@ -138,8 +158,8 @@ replay File
 [Frontend]
     ├── Loads indexed JSON
     ├── When user scrubs timeline to 2:30:
-    │   └── replay_time_window 150
-    │   └── Loads positions[150]
+    │   └── match_second = 150
+    │   └── Loads positions[150] directly (no offset calculation needed)
     └── Displays hero positions at that moment
 ```
 
@@ -147,15 +167,13 @@ replay File
 
 ## Debugging: How to Verify Alignment
 
-### **STUB** Check 1: Example name
+### Check 1: Verify timeline alignment
 ```python
-# Should be near fountain/base at match start
-start_frame = match_start_time_s
-positions_at_start = positions[start_frame]
+# positions[0] should show heroes near fountain/base at match start
+positions_at_start = positions[0]
 
-# Should be scattered across map at 5 minutes
-mid_frame = match_start_time_s + int(300 * 30)
-positions_at_mid = positions[mid_frame]
+# positions[300] should show heroes scattered across map at 5 minutes
+positions_at_5min = positions[300]
 ```
 
 If positions are stationary or in wrong location, timeline is misaligned.
@@ -221,13 +239,14 @@ The `lifestate.rs` example in haste (`LIFE_ALIVE=0, LIFE_DEAD=2`) shows the form
 
 ## Summary: The Mental Model
 
-**replay files = raw chronological recording, starting before match**
+**Parser output = match-relative arrays, starting at match second 0**
 
-- Time window 0 = pre-match lobby
-- Time window N = match start (where N = match_start_time_s)
-- positions[i] always corresponds to replay time window i
-- match_clock always in seconds from match start
+- positions[i] = match second i (positions[0] = match starts)
+- boss.health_timeline[i] = match second i (aligned with positions)
+- creep_waves[i] = match second i (aligned with positions)
+- match_start_time_s is metadata -- not needed as a positions[] offset
+- Use positions.len() for match duration (not total_match_time_s -- see rough edge note above)
 
-**Core rule:** Every time you index into positions[], verify you're using the correct offset from `match_start_time_s`.
+**Core rule:** positions[0] is match second 0. Index directly; no offset required.
 
-**See also:** `private/learnings.md` — "replay Timeline Offset: Reconciliation Pattern" for the cross-project summary.
+**See also:** `private/learnings.md` — Drafts section for the timeline alignment change note.
