@@ -76,7 +76,11 @@ const MatchAnalysis = () => {
   const playersData = parsedMatchData.players_data;
   // NOTE: Contains dmg/position data per player
   const perPlayerData = parsedMatchData.per_player_data;
-  const matchDuration = parsedMatchData.total_match_time_s;
+  // FIXME: our frontend shouldn't care what the match duration is and
+  // backend/app/services/players_data_service also has this calculation.
+  // This should be owned by the parser.
+  const matchDuration =
+    parsedMatchData.total_match_time_s - parsedMatchData.match_start_time_s;
   const [heroData, setHeroData] = useState<Hero[]>([
     { id: 0, name: 'Default', images: {} },
   ]);
