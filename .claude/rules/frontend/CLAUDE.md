@@ -123,6 +123,10 @@ npm run test:browser
 # Run tests with coverage
 npm test -- --coverage
 
+# From repo root (without local Node toolchain)
+docker-compose run --rm dashjump-frontend npm test
+docker-compose run --rm dashjump-frontend npm test -- --coverage
+
 # Linting
 npm run lint
 

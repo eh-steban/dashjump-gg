@@ -94,6 +94,10 @@ pytest
 # Run with coverage
 pytest --cov=app --cov-report=term-missing
 
+# From repo root (without local Python toolchain)
+docker-compose run --rm dashjump-backend pytest
+docker-compose run --rm dashjump-backend pytest --cov=app --cov-report=term-missing
+
 # Linting
 ruff check app/
 ruff format app/

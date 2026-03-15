@@ -88,6 +88,19 @@ cargo fmt --check
 cargo build --release
 ```
 
+### From repo root (without local Rust toolchain)
+
+```bash
+# Tests
+docker-compose run --rm dashjump-parser cargo test
+
+# Specific module
+docker-compose run --rm dashjump-parser cargo test creep_tracker
+
+# With output
+docker-compose run --rm dashjump-parser cargo test -- --nocapture
+```
+
 ## Data Flow
 
 1. Backend sends replay file URL to parser (port `9000`)
