@@ -6,6 +6,6 @@ pub mod damage;
 pub mod player;
 
 pub use boss::BossSnapshot;
-pub use creep::{CreepWaveData, CreepWaveSnapshot, CreepWaveTimeline};
+pub use creep::{CreepSnapshot, CreepTimeline, LaneCreepData, WaveMeta};
 pub use damage::DamageRecord;
 pub use player::{Player, PlayerPosition};

@@ -20,14 +20,16 @@ parser/
 │   │   ├── player.rs         # Player, PlayerPosition
 │   │   ├── boss.rs           # BossSnapshot
 │   │   ├── damage.rs         # DamageRecord
-│   │   └── creep.rs          # CreepWaveSnapshot, CreepWaveData
+│   │   └── creep.rs          # CreepSnapshot, LaneCreepData, WaveMeta
 │   │
 │   ├── entities/             # Entity Identification
 │   │   └── constants.rs      # Entity hashes, field keys (fkey_from_path)
 │   │
 │   ├── tracking/             # Stateful Trackers
 │   │   ├── boss_tracker.rs   # BossTracker (spawn/despawn lifecycle)
-│   │   └── creep_tracker.rs  # CreepTracker (wave state tracking)
+│   │   └── creep_tracker/    # CreepTracker (per-creep lane tracking)
+│   │       ├── mod.rs        #   implementation
+│   │       └── tests.rs      #   unit tests
 │   │
 │   ├── utils/                # Pure Helper Functions
 │   │   ├── entity_position.rs # get_entity_position()
@@ -68,6 +70,12 @@ parser/
 | `entities/` | Nothing (pure constants) |
 | `domain/` | Nothing (pure data structures) |
 | `utils/` | `entities/` only (for field keys) |
+
+## Testing Conventions
+
+Unit tests live in a separate `tests.rs` file alongside the module they test, not inline in the source file. For a module `foo.rs`, create `foo/mod.rs` (implementation) and `foo/tests.rs` (tests), then declare `#[cfg(test)] mod tests;` at the bottom of `mod.rs`.
+
+This keeps `tests.rs` a child module of `foo`, so private fields remain accessible without any API changes.
 
 ## Commands
 

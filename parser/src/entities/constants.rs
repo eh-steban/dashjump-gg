@@ -25,16 +25,28 @@ pub const CCITADEL_GRAVESTONE_BLOCKER_ENTITY: u64 =
 
 // NPC entities
 pub const CNPC_TROOPER_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_Trooper");
+/// Lane objective -- priority 1 / first target (Guardian). The first structure creeps push
+/// toward in each lane. Destroying it opens the path to the Walker.
 pub const CNPC_TROOPERBOSS_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_TrooperBoss");
 pub const CNPC_TROOPERNEUTRAL_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_TrooperNeutral");
 pub const CNPC_MIDBOSS_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_MidBoss");
 
 // Objective entities
 pub const CITEMXP_ENTITY: u64 = fxhash::hash_bytes(b"CItemXP");
+
+/// Lane objective -- priority 4 (Shrine). Destroyable building on each lane route.
+/// Must be destroyed before reaching the Base Guardian.
 pub const CCITADEL_DESTROYABLE_BUILDING_ENTITY: u64 =
     fxhash::hash_bytes(b"CCitadel_Destroyable_Building");
+
+/// Lane objective -- priority 2 (Walker). Second priority target in lane after the Guardian.
 pub const CNPC_BOSS_TIER2_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_Boss_Tier2");
+
+/// Lane objective -- priority 3 (Base Guardian). Third priority target after the Walker.
 pub const CNPC_BARRACKBOSS_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_BarrackBoss");
+
+/// Lane objective -- priority 5 / final (Patron). The main base objective; destroying it ends
+/// the match. Last priority in the standard lane-push sequence.
 pub const CNPC_BOSS_TIER3_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_Boss_Tier3");
 
 // Neutral entities

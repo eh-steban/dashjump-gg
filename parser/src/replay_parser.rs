@@ -17,6 +17,7 @@ use haste::valveprotos::prost::Message;
 use tracing::{error, info};
 
 use crate::domain::{DamageRecord, Player, PlayerPosition};
+// Note: CreepSnapshot, LaneCreepData etc. are used via CreepTracker::get_output()
 use crate::entities::constants::*;
 use crate::tracking::{BossTracker, CreepTracker};
 use crate::utils::{get_entity_position, get_steam_id32};
@@ -60,7 +61,7 @@ impl Default for MyVisitor {
 impl MyVisitor {
     /// Get final match data as JSON
     pub fn get_match_data_json(&self) -> serde_json::Value {
-        let creep_waves = self.creep_tracker.get_output();
+        let lane_creep_data = self.creep_tracker.get_output();
 
         serde_json::json!({
             "total_match_time_s": self.total_match_time_s,
@@ -69,7 +70,7 @@ impl MyVisitor {
             "players": self.players,
             "positions": self.positions,
             "bosses": self.boss_tracker.get_output(),
-            "creep_waves": creep_waves,
+            "lane_creep_data": lane_creep_data,
         })
     }
 
@@ -307,7 +308,10 @@ impl Visitor for &mut MyVisitor {
             // (0-indexed from match second 0, matching the player positions array)
             let match_window = this_window - self.match_start_time_s.unwrap();
             self.boss_tracker.build_health_window(match_window);
-            self.creep_tracker.build_wave_window(match_window);
+
+            // Collect player positions this tick for nearby-player computation in creep snapshots.
+            // We scan all player pawns and convert custom_id to i32 for the tracker API.
+            let mut player_positions_for_creeps: Vec<(i32, f32, f32)> = Vec::new();
 
             // Collect positions for all tracked entities
             for (_index, entity) in ctx.entities().unwrap().iter() {
@@ -318,6 +322,11 @@ impl Visitor for &mut MyVisitor {
                 let custom_id = self.get_custom_id(ctx, entity);
                 let is_npc = self.is_npc_entity(entity);
 
+                // Collect player pawn positions for creep nearby-player computation
+                if !is_npc {
+                    player_positions_for_creeps.push((custom_id as i32, position[0], position[1]));
+                }
+
                 self.positions_window.push(PlayerPosition {
                     custom_id: custom_id.to_string(),
                     x: position[0],
@@ -326,6 +335,10 @@ impl Visitor for &mut MyVisitor {
                     is_npc,
                 });
             }
+
+            // Build creep snapshots with current player positions for proximity tracking
+            self.creep_tracker
+                .build_creep_snapshot(match_window, &player_positions_for_creeps);
 
             self.damage.push(std::mem::take(&mut self.damage_window));
             self.positions
@@ -371,7 +384,20 @@ impl Visitor for &mut MyVisitor {
                 }
                 // Only track creeps after match starts
                 if match_started && CreepTracker::is_creep_entity(hash) {
-                    self.creep_tracker.handle_creep_create(entity);
+                    let position = get_entity_position(entity);
+                    let team: u32 = entity.get_value(&TEAM_KEY).unwrap_or(0);
+                    let lane: i32 = entity.get_value(&NPC_LANE_KEY).unwrap_or(0);
+                    let match_time_s = self.total_match_time_s.saturating_sub(
+                        self.match_start_time_s.unwrap_or(0),
+                    );
+                    self.creep_tracker.handle_creep_create(
+                        entity.index(),
+                        lane,
+                        team,
+                        position[0],
+                        position[1],
+                        match_time_s,
+                    );
                 }
             }
             DeltaHeader::DELETE => {
@@ -379,7 +405,8 @@ impl Visitor for &mut MyVisitor {
                 self.boss_tracker
                     .handle_boss_delete(entity, match_time_s);
                 if CreepTracker::is_creep_entity(hash) {
-                    self.creep_tracker.handle_creep_delete(entity.index());
+                    self.creep_tracker
+                        .handle_creep_delete(entity.index(), match_time_s);
                 }
             }
             DeltaHeader::UPDATE => {
@@ -389,7 +416,20 @@ impl Visitor for &mut MyVisitor {
                 }
                 // Update creep positions (only if match started)
                 if match_started && CreepTracker::is_creep_entity(hash) {
-                    self.creep_tracker.handle_creep_update(entity);
+                    let position = get_entity_position(entity);
+                    let team: u32 = entity.get_value(&TEAM_KEY).unwrap_or(0);
+                    let lane: i32 = entity.get_value(&NPC_LANE_KEY).unwrap_or(0);
+                    let match_time_s = self.total_match_time_s.saturating_sub(
+                        self.match_start_time_s.unwrap_or(0),
+                    );
+                    self.creep_tracker.handle_creep_update(
+                        entity.index(),
+                        lane,
+                        team,
+                        position[0],
+                        position[1],
+                        match_time_s,
+                    );
                 }
             }
             _ => {}

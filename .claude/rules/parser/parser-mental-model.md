@@ -225,6 +225,29 @@ The `lifestate.rs` example in haste (`LIFE_ALIVE=0, LIFE_DEAD=2`) shows the form
 
 ---
 
+## Creep Tracking Architecture
+
+### Wave Grouping: Spawn-Time Over Spatial Clustering
+
+The `CreepTracker` assigns `wave_id` at CREATE time using spawn-time grouping, not spatial clustering. Two creeps in the same `(lane, team)` that spawn within 5 seconds share a `wave_id = "lane_team_spawnsec"`.
+
+**Why spatial clustering was abandoned:**
+
+1. **False second wave during zipline touchdown.** Deadlock creeps ride a zipline from spawn to lane. During the ~1–2 second touchdown window the 4 creeps in a wave spread out before converging into march formation. A 1000-unit cluster threshold treated that spread as two separate waves. The second cluster disappeared once creeps converged, and the real next wave then got index 0 — producing unstable, non-correlatable wave identities across time.
+
+2. **Dead creep semantics.** Spatial re-clustering every second shifted wave keys after deaths reduced a cluster, making it impossible to correlate "wave X at second 50" with "wave X at second 60".
+
+Spawn-time grouping fixes both: wave identity is assigned once and never changes.
+
+### Entity Lifecycle in Deadlock Demos (Lane Creeps)
+
+- CREATE fires close to actual spawn (within 1–2 ticks). Pre-match creeps have `m_iLane == 0` and are gated out before the tracker sees them (gated by `match_started` in `replay_parser.rs::on_entity`).
+- DELETE fires reliably on creep death for lane creeps (the lane is always in the demo recorder's interest scope).
+- The same `entity_index` is **not reused** within a match.
+- There is **no double-CREATE** across the zipline/in-lane transition — the entity is created once and updated via UPDATE events throughout its lifetime.
+
+---
+
 ## References in Codebase
 
 | Location | Use |
@@ -245,7 +268,7 @@ The `lifestate.rs` example in haste (`LIFE_ALIVE=0, LIFE_DEAD=2`) shows the form
 
 - positions[i] = match second i (positions[0] = match starts)
 - boss.health_timeline[i] = match second i (aligned with positions)
-- creep_waves[i] = match second i (aligned with positions)
+- lane_creep_data.creeps[entity_idx][i] = match second i (aligned with positions)
 - match_start_time_s is metadata -- not needed as a positions[] offset
 - Use positions.len() for match duration (not total_match_time_s -- see rough edge note above)
 
