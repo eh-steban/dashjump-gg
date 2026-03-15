@@ -234,6 +234,8 @@ The `lifestate.rs` example in haste (`LIFE_ALIVE=0, LIFE_DEAD=2`) shows the form
 | `backend/app/application/mappers/match_mapper.py` | Converts parser output to domain models |
 | `frontend/src/domain/timeline.ts` | Time conversion utilities |
 | `frontend/src/components/matchAnalysis/MatchTimeViewer.tsx` | Reads match_start_time_s for timeline scrubbing |
+| `private/specs/citadel-messages-reference.md` | Citadel protobuf message catalog -- fields, IDs, product alignment |
+| `private/specs/deadlock-api-haste-reference.md` | haste Visitor trait, subscription patterns, parse lifecycle |
 
 ---
 

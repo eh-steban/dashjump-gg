@@ -101,6 +101,12 @@ docker-compose run --rm dashjump-parser cargo test creep_tracker
 docker-compose run --rm dashjump-parser cargo test -- --nocapture
 ```
 
+## Domain References
+
+Before implementing new message listeners, check:
+- `private/specs/citadel-messages-reference.md` -- Citadel protobuf message catalog with fields and product alignment
+- `private/specs/deadlock-api-haste-reference.md` -- haste parse lifecycle, Visitor trait, message subscription patterns
+
 ## Data Flow
 
 1. Backend sends replay file URL to parser (port `9000`)

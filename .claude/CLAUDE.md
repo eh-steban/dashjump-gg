@@ -58,6 +58,8 @@ See `.claude/rules/` for detailed standards:
 Specialized subagents for autonomous work:
 - `backend-python` -- Python/FastAPI: endpoints, use cases, domain services, backend tests
 - `frontend-react` -- React/TypeScript: components, hooks, state, frontend tests
+- `rust-parser` -- Rust/Axum parser: replay parsing, message listeners, entity tracking, parser tests
+- `haste-expert` -- Deadlock domain expert: maps Citadel messages to features, updates `private/specs/` reference docs, answers "what data can we get?" questions
 - `spec-writer` -- Specs, experiment katas, strategy docs, learnings consolidation
 - `code-reviewer` -- Security, convention, logic, and test coverage review (read-only)
 - `test-auditor` -- Periodic test suite audit across all services (read-only)

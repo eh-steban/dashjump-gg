@@ -24,6 +24,10 @@ Also check private/learnings-index.md for cross-project learnings, especially:
 - Demo timeline offset (frame reconciliation, game_clock vs demo_time)
 - Any timeline or position data handling
 
+When implementing new message listeners, check:
+- `private/specs/citadel-messages-reference.md` -- message catalog with fields, IDs, and product alignment
+- `private/specs/deadlock-api-haste-reference.md` -- Visitor trait API, subscription patterns, entity field lookup
+
 ## Testing (integrated)
 - Write tests alongside implementation using Rust's built-in test framework
 - Test error paths: malformed replay data, missing fields, corrupt files
