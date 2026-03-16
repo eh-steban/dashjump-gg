@@ -17,8 +17,8 @@ class MatchDataService:
         Assembles complete match data including:
         - Per-player position data
         - Per-player damage data
-        - Creep wave position data (per lane/team)
-        - Lane pressure metrics (derived from creep wave positions)
+        - Per-creep lane tracking data (per entity)
+        - Lane pressure metrics (derived from per-creep positions and boss objectives)
 
         Args:
             parsed_match: Parser output with raw position, damage, and creep data
@@ -26,10 +26,10 @@ class MatchDataService:
         Returns:
             Complete TransformedMatchData ready for storage and API response
         """
-        # Derive lane pressure from creep wave positions
+        # Derive lane pressure from per-creep data and boss objectives
         lane_pressure = LanePressureCalculator.process_creep_waves(
-            parsed_match.creep_waves,
-            parsed_match.positions,
+            parsed_match.lane_creep_data,
+            parsed_match.bosses,
         )
 
         # Aggregate per-player position and damage data
@@ -42,6 +42,6 @@ class MatchDataService:
             players_data=parsed_match.players_data,
             per_player_data=per_player_data,
             bosses=parsed_match.bosses,
-            creep_waves=parsed_match.creep_waves,
+            lane_creep_data=parsed_match.lane_creep_data,
             lane_pressure=lane_pressure,
         )

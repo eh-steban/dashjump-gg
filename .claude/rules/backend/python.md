@@ -76,6 +76,22 @@ class MatchRepository:
         self.s3_client = s3_client
 ```
 
+## Constants and Magic Numbers
+
+Every non-obvious constant must include an inline comment citing its source or derivation:
+
+```python
+# ✅ Good
+WAVE_RADIUS = 1500.0       # world units; matches parser nearby_players proximity threshold
+FALLBACK_LANE_LENGTH = 21504.0  # TODO: verify -- estimated from map bounds, needs real replay measurement
+
+# ❌ Bad
+WAVE_RADIUS = 1500.0
+FALLBACK_LANE_LENGTH = 21504.0
+```
+
+If the source is unknown or unverified, use a `# TODO: verify -- <reason>` comment so it surfaces in reviews.
+
 ## API Design
 
 - Follow REST conventions

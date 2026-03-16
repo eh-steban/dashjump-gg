@@ -1,23 +1,41 @@
-"""Creep wave domain models for lane pressure tracking."""
+"""Creep domain models for per-creep lane tracking."""
 
 from typing import Optional
 from sqlmodel import SQLModel
 
 
-class CreepWaveSnapshot(SQLModel):
-    """Snapshot of a creep wave at a given time."""
+class CreepSnapshot(SQLModel):
+    """Per-second snapshot for one individual creep while it is alive."""
 
-    x: float  # Centroid X position
-    y: float  # Centroid Y position
-    count: int  # Number of creeps in the wave
-    team: int  # Team (2 = Amber, 3 = Sapphire)
+    x: float
+    y: float
+    lane: int
+    team: int
+    wave_id: str  # "lane_team_spawnsec" e.g. "1_2_45"
+    nearby_players: list[int]  # player custom_ids within 1500 world units
 
 
-class CreepWaveData(SQLModel):
-    """Container for all creep wave data.
+class WaveMeta(SQLModel):
+    """Metadata computed across a wave's full lifetime.
 
-    Key format: "{lane}_{team}" (e.g., "1_2" for lane 1, team 2/Amber)
-    Value: per-second snapshots (None if no wave that second)
+    Wave membership is derived by filtering creep snapshots where wave_id matches --
+    no entity indices stored here to avoid duplication.
     """
 
-    waves: dict[str, list[Optional[CreepWaveSnapshot]]]
+    lane: int
+    team: int
+    spawn_sec: int
+    last_death_sec: Optional[int] = None   # match-relative second of last creep death
+    last_death_x: Optional[float] = None
+    last_death_y: Optional[float] = None
+
+
+class LaneCreepData(SQLModel):
+    """Container for all per-creep lane tracking data.
+
+    creeps: str(entity_index) -> match-relative timeline (None = dead or not yet spawned)
+    wave_meta: wave_id -> metadata
+    """
+
+    creeps: dict[str, list[Optional[CreepSnapshot]]]
+    wave_meta: dict[str, WaveMeta]

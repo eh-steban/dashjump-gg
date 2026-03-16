@@ -4,6 +4,7 @@ from app.application.use_cases.analyze_match import AnalyzeMatchUseCase
 from app.domain.exceptions import ParserServiceError, DeadlockAPIError
 from app.domain.match_analysis import TransformedMatchData
 from app.domain.boss import BossData
+from app.domain.creep import LaneCreepData
 
 
 @pytest.mark.asyncio
@@ -20,8 +21,9 @@ async def test_execute_returns_cached_data_when_available():
         per_player_data={},
         bosses=BossData(
             snapshots=[],
-            health_timeline=[]
-        )
+            health_timeline=[],
+        ),
+        lane_creep_data=LaneCreepData(creeps={}, wave_meta={}),
     )
     mock_repo.get_match_data.return_value = cached_data
 
@@ -50,7 +52,8 @@ async def test_execute_uses_local_demo_when_available():
         "players": [],
         "damage": [],
         "positions": [],
-        "bosses": {"snapshots": [], "health_timeline": []}
+        "bosses": {"snapshots": [], "health_timeline": []},
+        "lane_creep_data": {"creeps": {}, "wave_meta": {}},
     }
 
     use_case = AnalyzeMatchUseCase(mock_parser, mock_deadlock, mock_repo)
@@ -79,7 +82,8 @@ async def test_execute_falls_back_to_api_when_parser_check_fails():
         "players": [],
         "damage": [],
         "positions": [],
-        "bosses": {"snapshots": [], "health_timeline": []}
+        "bosses": {"snapshots": [], "health_timeline": []},
+        "lane_creep_data": {"creeps": {}, "wave_meta": {}},
     }
 
     use_case = AnalyzeMatchUseCase(mock_parser, mock_deadlock, mock_repo)
@@ -106,8 +110,9 @@ async def test_execute_falls_back_when_local_parse_fails():
             "players": [],
             "damage": [],
             "positions": [],
-            "bosses": {"snapshots": [], "health_timeline": []}
-        }
+            "bosses": {"snapshots": [], "health_timeline": []},
+            "lane_creep_data": {"creeps": {}, "wave_meta": {}},
+        },
     ]
     mock_deadlock.get_demo_url.return_value = {"demo_url": "http://example.com/demo.bz2"}
 

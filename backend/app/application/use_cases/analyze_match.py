@@ -4,7 +4,7 @@ import json
 import sys
 
 from app.domain.boss import BossData
-from app.domain.creep import CreepWaveData
+from app.domain.creep import LaneCreepData
 from app.domain.exceptions import DeadlockAPIError, ParserServiceError
 from app.domain.match_analysis import (
     ParsedAttackerVictimMap,
@@ -171,12 +171,12 @@ class AnalyzeMatchUseCase:
             ParsedAttackerVictimMap(**d) for d in parsed_json_resp.get("damage", {})
         ]
 
-        # Parse creep_waves if present (provide empty default for old cached data)
-        creep_waves_raw = parsed_json_resp.get("creep_waves")
-        creep_waves = (
-            CreepWaveData(**creep_waves_raw)
-            if creep_waves_raw
-            else CreepWaveData(waves={})
+        # Parse lane_creep_data if present (provide empty default for old cached data)
+        lane_creep_raw = parsed_json_resp.get("lane_creep_data")
+        lane_creep_data = (
+            LaneCreepData(**lane_creep_raw)
+            if lane_creep_raw
+            else LaneCreepData(creeps={}, wave_meta={})
         )
 
         parsed_match = ParsedMatchResponse(
@@ -186,7 +186,7 @@ class AnalyzeMatchUseCase:
             players_data=players_list,
             positions=Positions(parsed_json_resp.get("positions", [])),
             bosses=BossData(**parsed_json_resp.get("bosses", {})),
-            creep_waves=creep_waves,
+            lane_creep_data=lane_creep_data,
         )
 
         # Log compression metrics

@@ -1,141 +1,258 @@
-"""Lane pressure calculation service."""
+"""Lane pressure calculation service.
 
+Computes per-wave, per-second pressure based on alive creep positions relative
+to the nearest alive enemy lane objective (lane-assigned, not proximity-based).
+
+Formula per second:
+  centroid      = mean position of alive creeps in wave
+  target        = nearest alive enemy objective (Guardian → Walker → ... → Patron)
+  own_frontline = nearest alive own objective (same priority ordering, own team)
+  lane_length   = euclidean(own_frontline, target)  -- dynamic; shrinks as objectives die
+  dist          = euclidean(centroid, target)
+  raw_pressure  = clamp(1.0 - dist / lane_length, 0.0, 1.0)
+  pressure      = raw_pressure * (alive_creep_count * 0.25)
+"""
+
+import math
 from typing import Optional
 
-from app.domain.creep import CreepWaveData, CreepWaveSnapshot
+from app.domain.boss import BossData, BossSnapshot
+from app.domain.creep import LaneCreepData, CreepSnapshot
 from app.domain.lane_pressure import LanePressureData, LanePressureSnapshot
-from app.domain.player import PlayerPosition, Positions
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# World bounds from parser's minimap constants
-# TODO: Pull these values from parser. These rarely if
-# ever change, but I haven't tested it either. Worth
-# looking into this.
-WORLD_MIN = -10752.0
-WORLD_MAX = 10752.0
-WORLD_SPAN = 21504.0  # WORLD_MAX - WORLD_MIN
+# Boss type priority (lower number = attacked first by creeps)
+# Maps boss_name_hash custom_id values from parser to priority order.
+# Priority: Guardian=1, Walker=2, Base Guardian=3, Shrine=4, Patron=5
+_BOSS_PRIORITY: dict[int, int] = {
+    21: 1,  # CNPC_TROOPERBOSS_ENTITY  - Guardian
+    25: 2,  # CNPC_BOSS_TIER2_ENTITY   - Walker
+    26: 3,  # CNPC_BARRACKBOSS_ENTITY  - Base Guardian
+    27: 4,  # CCITADEL_DESTROYABLE_BUILDING_ENTITY - Shrine
+    28: 5,  # CNPC_BOSS_TIER3_ENTITY   - Patron
+}
+
+# Enemy team mapping
+# bidirectional lookup table:
+# team 2's enemy is team 3, and team 3's enemy is team 2
+_ENEMY_TEAM: dict[int, int] = {2: 3, 3: 2}
+
+
+def _euclidean(x1: float, y1: float, x2: float, y2: float) -> float:
+    dx = x1 - x2
+    dy = y1 - y2
+    return math.sqrt(dx * dx + dy * dy)
+
+
+def _clamp(value: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, value))
 
 
 class LanePressureCalculator:
-    """Calculate lane pressure from creep wave positions."""
+    """Calculate lane pressure from per-creep data and boss objective positions."""
 
-    @staticmethod
-    def calculate_pressure(wave: CreepWaveSnapshot) -> float:
-        """Calculate pressure (0-1) based on wave position.
-
-        Pressure represents how far into enemy territory the wave has pushed.
-        - Amber (team=2) base is at low Y; creeps push toward high Y (Sapphire base): pressure = normalized_y
-        - Sapphire (team=3) base is at high Y; creeps push toward low Y (Amber base): pressure = 1.0 - normalized_y
-
-        Args:
-            wave: CreepWaveSnapshot with x, y, team
-
-        Returns:
-            float between 0.0 (own base) and 1.0 (enemy base)
-        """
-        normalized_y = (wave.y - WORLD_MIN) / WORLD_SPAN
-
-        if wave.team == 2:  # Amber base at low Y, pushes toward high Y
-            return normalized_y
-        else:  # Sapphire base at high Y, pushes toward low Y
-            return 1.0 - normalized_y
-
-    @staticmethod
-    def attribute_players(
-        wave: CreepWaveSnapshot,
-        player_positions: list[Optional[PlayerPosition]],
-        proximity_threshold: float = 1500.0,
-    ) -> list[int]:
-        """Find players within proximity of wave centroid.
-
-        Args:
-            wave: CreepWaveSnapshot with x, y coordinates
-            player_positions: List of PlayerPosition for current tick (may contain None)
-            proximity_threshold: Distance threshold in world units (default 1500)
-
-        Returns:
-            List of player custom_ids (as int) within threshold
-        """
-        attributed = []
-
-        for player_pos in player_positions:
-            if player_pos is None:
-                continue
-
-            # Skip NPCs - only attribute to actual players
-            if player_pos.is_npc:
-                continue
-
-            # Calculate Euclidean distance
-            dx = player_pos.x - wave.x
-            dy = player_pos.y - wave.y
-            distance = (dx * dx + dy * dy) ** 0.5
-
-            if distance <= proximity_threshold:
-                # Convert custom_id to int
-                attributed.append(int(player_pos.custom_id))
-
-        return attributed
+    # ---------------------------------------------------------------------------
+    # Public entry point
+    # ---------------------------------------------------------------------------
 
     @staticmethod
     def process_creep_waves(
-        creep_waves: CreepWaveData,
-        positions: Positions,
+        lane_creep_data: LaneCreepData,
+        boss_data: BossData,
     ) -> LanePressureData:
-        """Process all creep waves and calculate lane pressure.
+        """Process all waves and calculate lane pressure per second.
 
         Args:
-            creep_waves: CreepWaveData from parser
-            positions: Player positions indexed by tick (list of PositionWindow)
+            lane_creep_data: Per-creep timeline data from parser.
+            boss_data: Boss snapshot and health timeline data.
 
         Returns:
-            LanePressureData with pressure snapshots
+            LanePressureData keyed by wave_id.
         """
-        pressure_timeline: dict[str, list[Optional[LanePressureSnapshot]]] = {}
-
-        if not creep_waves or not creep_waves.waves:
-            logger.warning("No creep wave data available - returning empty pressure data")
+        if not lane_creep_data or not lane_creep_data.wave_meta:
+            logger.warning("No lane creep data available - returning empty pressure data")
             return LanePressureData(pressure={})
 
-        # Process each lane_team combination
-        for lane_team_key, wave_snapshots in creep_waves.waves.items():
-            pressure_snapshots: list[Optional[LanePressureSnapshot]] = []
+        # Build objective lookup: (lane, team) -> sorted list of BossSnapshots by priority
+        objective_map = LanePressureCalculator._build_objective_map(boss_data)
 
-            for tick_idx, wave in enumerate(wave_snapshots):
-                if wave is None:
-                    pressure_snapshots.append(None)
+        pressure_timeline: dict[str, list[Optional[LanePressureSnapshot]]] = {}
+
+        for wave_id, wave_meta in lane_creep_data.wave_meta.items():
+            lane = wave_meta.lane
+            team = wave_meta.team
+            enemy_team = _ENEMY_TEAM.get(team)
+            if enemy_team is None:
+                logger.error("Unknown team id %d in wave %s -- skipping wave", team, wave_id)
+                continue
+
+            own_objectives = objective_map.get((lane, team), [])
+            enemy_objectives = objective_map.get((lane, enemy_team), [])
+
+            # Determine timeline length from creep data
+            timeline_length = LanePressureCalculator._wave_timeline_length(
+                wave_id, lane_creep_data
+            )
+
+            snapshots: list[Optional[LanePressureSnapshot]] = []
+
+            for second in range(timeline_length):
+                alive_creeps = LanePressureCalculator._alive_creeps_at(
+                    wave_id, second, lane_creep_data
+                )
+
+                if not alive_creeps:
+                    snapshots.append(None)
                     continue
 
-                # Calculate pressure
-                pressure = LanePressureCalculator.calculate_pressure(wave)
+                # Centroid (internal only — not in output)
+                centroid_x = sum(c.x for c in alive_creeps) / len(alive_creeps)
+                centroid_y = sum(c.y for c in alive_creeps) / len(alive_creeps)
 
-                # Get player positions for this tick
-                player_positions = positions[tick_idx] if tick_idx < len(positions) else []
+                # Dynamic lane_length: distance between own frontline and enemy frontline at this second
+                target = LanePressureCalculator._current_target(
+                    enemy_objectives, boss_data, second
+                )
+                own_frontline = LanePressureCalculator._own_frontline_objective(
+                    own_objectives, boss_data, second
+                )
+                lane_length = _euclidean(own_frontline.x, own_frontline.y, target.x, target.y)
+                dist = _euclidean(centroid_x, centroid_y, target.x, target.y)
+                raw_pressure = _clamp(1.0 - dist / lane_length, 0.0, 1.0)
 
-                # Attribute players
-                attributed_players = LanePressureCalculator.attribute_players(
-                    wave, player_positions
+                pressure = raw_pressure * (len(alive_creeps) * 0.25)
+
+                attributed_players: list[int] = []
+                seen: set[int] = set()
+                for creep in alive_creeps:
+                    for pid in creep.nearby_players:
+                        if pid not in seen:
+                            seen.add(pid)
+                            attributed_players.append(pid)
+
+                snapshots.append(
+                    LanePressureSnapshot(
+                        pressure=pressure,
+                        team=team,
+                        wave_id=wave_id,
+                        creep_count=len(alive_creeps),
+                        attributed_players=attributed_players,
+                    )
                 )
 
-                # Create pressure snapshot
-                pressure_snapshot = LanePressureSnapshot(
-                    pressure=pressure,
-                    team=wave.team,
-                    attributed_players=attributed_players,
-                    wave_x=wave.x,
-                    wave_y=wave.y,
-                    wave_count=wave.count,
-                )
-
-                pressure_snapshots.append(pressure_snapshot)
-
-            pressure_timeline[lane_team_key] = pressure_snapshots
+            pressure_timeline[wave_id] = snapshots
 
         logger.debug(
-            "Calculated pressure for %d lane/team combinations",
+            "Calculated pressure for %d wave(s)",
             len(pressure_timeline),
         )
 
         return LanePressureData(pressure=pressure_timeline)
+
+    # ---------------------------------------------------------------------------
+    # Internal helpers
+    # ---------------------------------------------------------------------------
+
+    @staticmethod
+    def _build_objective_map(
+        boss_data: BossData,
+    ) -> dict[tuple[int, int], list[BossSnapshot]]:
+        """Build lookup: (lane, team) -> BossSnapshots sorted by attack priority."""
+        objective_map: dict[tuple[int, int], list[BossSnapshot]] = {}
+
+        for snap in boss_data.snapshots:
+            key = (snap.lane, snap.team)
+            objective_map.setdefault(key, []).append(snap)
+
+        # Sort each bucket by priority (lower custom_id priority value = first target)
+        for key in objective_map:
+            objective_map[key].sort(
+                key=lambda s: _BOSS_PRIORITY.get(s.custom_id, 99)
+            )
+
+        return objective_map
+
+    @staticmethod
+    def _wave_timeline_length(wave_id: str, lane_creep_data: LaneCreepData) -> int:
+        """Return the timeline length for this wave by finding any live creep snapshot.
+
+        Every wave has at least one live snapshot (creeps live for at least ~1 second),
+        so we can return as soon as we find a matching entry.
+        """
+        for timeline in lane_creep_data.creeps.values():
+            for snap in timeline:
+                if snap is not None and snap.wave_id == wave_id:
+                    return len(timeline)
+        logger.error("No live snapshots found for wave %s -- wave_meta references unknown wave", wave_id)
+        return 0
+
+    @staticmethod
+    def _alive_creeps_at(
+        wave_id: str,
+        second: int,
+        lane_creep_data: LaneCreepData,
+    ) -> list[CreepSnapshot]:
+        """Return all alive creep snapshots for a wave at a given second."""
+        alive: list[CreepSnapshot] = []
+        for timeline in lane_creep_data.creeps.values():
+            if second >= len(timeline):
+                continue
+            snap = timeline[second]
+            if snap is not None and snap.wave_id == wave_id:
+                alive.append(snap)
+        return alive
+
+    @staticmethod
+    def _current_target(
+        enemy_objectives: list[BossSnapshot],
+        boss_data: BossData,
+        second: int,
+    ) -> BossSnapshot:
+        """Find the lowest-priority enemy objective that is alive at the given second.
+
+        Uses health_timeline to determine whether a boss is alive.
+        health_timeline is a list of dicts keyed by str(entity_index).
+        """
+        if second >= len(boss_data.health_timeline):
+            # Past the end of recorded data — treat first objective as alive
+            return enemy_objectives[0]
+
+        health_window = boss_data.health_timeline[second]
+
+        for boss in enemy_objectives:  # Already sorted by priority
+            key = str(boss.entity_index)
+            health = health_window.get(key)
+            if health is None or health > 0:
+                # Either health not recorded (treat as alive) or explicitly > 0
+                return boss
+
+        # All objectives have recorded health == 0; game should be over at this point.
+        # Return the patron as a safe fallback.
+        return enemy_objectives[-1]
+
+    @staticmethod
+    def _own_frontline_objective(
+        own_objectives: list[BossSnapshot],
+        boss_data: BossData,
+        second: int,
+    ) -> BossSnapshot:
+        """Find the lowest-priority own objective still alive at this second.
+
+        This is the 'own frontline' -- the nearest own objective to neutral ground.
+        Used as the near endpoint when computing dynamic lane_length per second.
+        """
+        if second >= len(boss_data.health_timeline):
+            return own_objectives[0]
+
+        health_window = boss_data.health_timeline[second]
+
+        for boss in own_objectives:  # Already sorted by priority
+            key = str(boss.entity_index)
+            health = health_window.get(key)
+            if health is None or health > 0:
+                return boss
+
+        # All own objectives have recorded health == 0; game should be over.
+        return own_objectives[-1]
