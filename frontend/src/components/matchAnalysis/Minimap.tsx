@@ -16,8 +16,8 @@ const MINIMAP_URL =
   'https://assets-bucket.deadlock-api.com/assets-api-res/images/maps/minimap.png';
 
 const Minimap = ({
-  currentTick,
-  setCurrentTick,
+  currentSecond,
+  setCurrentSecond,
   total_match_time_s,
   scaledBossSnapshots,
   MINIMAP_SIZE,
@@ -32,8 +32,8 @@ const Minimap = ({
   lanePressure,
   worldToMinimapPixels,
 }: {
-  currentTick: number;
-  setCurrentTick: Dispatch<SetStateAction<number>>;
+  currentSecond: number;
+  setCurrentSecond: Dispatch<SetStateAction<number>>;
   total_match_time_s: number;
   match_start_time_s: number;
   scaledBossSnapshots: ScaledBossSnapshot[];
@@ -66,14 +66,14 @@ const Minimap = ({
     let lastActiveKey: string | null = null;
     let currentIdx = -1;
     destroyedObjectivesSorted.forEach((obj, idx) => {
-      if (currentTick >= obj.destroyed_time_s) {
+      if (currentSecond >= obj.destroyed_time_s) {
         lastActiveKey = `${obj.team}_${obj.team_objective_id}`;
         currentIdx = idx;
       }
     });
     setActiveObjectiveKey(lastActiveKey);
     setCurrentObjectiveIndex(currentIdx);
-  }, [destroyedObjectivesSorted, currentTick]);
+  }, [destroyedObjectivesSorted, currentSecond]);
 
   return (
     <>
@@ -97,7 +97,7 @@ const Minimap = ({
           <Objectives
             scaledBossSnapshots={scaledBossSnapshots}
             destroyedObjectives={destroyedObjectivesSorted}
-            currentTick={currentTick}
+            currentTick={currentSecond}
             activeObjectiveKey={activeObjectiveKey}
           />
           <PlayerPositions
@@ -107,7 +107,7 @@ const Minimap = ({
           <CreepWaveLayer
             creepWaves={creepWaves}
             lanePressure={lanePressure}
-            currentTick={currentTick}
+            currentTick={currentSecond}
             worldToMinimapPixels={worldToMinimapPixels}
           />
         </div>

@@ -268,8 +268,8 @@ const MatchAnalysis = () => {
               </div>
               <div className='flex flex-col gap-2'>
                 <Minimap
-                  currentTick={currentTick}
-                  setCurrentTick={setCurrentTick}
+                  currentSecond={currentTick}
+                  setCurrentSecond={setCurrentTick}
                   total_match_time_s={matchDuration}
                   match_start_time_s={
                     matchAnalysis.parsed_match_data.match_start_time_s
