@@ -257,8 +257,11 @@ Spawn-time grouping fixes both: wave identity is assigned once and never changes
 | `backend/app/application/mappers/match_mapper.py` | Converts parser output to domain models |
 | `frontend/src/domain/timeline.ts` | Time conversion utilities |
 | `frontend/src/components/matchAnalysis/MatchTimeViewer.tsx` | Reads match_start_time_s for timeline scrubbing |
-| `private/specs/citadel-messages-reference.md` | Citadel protobuf message catalog -- fields, IDs, product alignment |
-| `private/specs/deadlock-api-haste-reference.md` | haste Visitor trait, subscription patterns, parse lifecycle |
+| `private/specs/citadel-messages-reference.md` | Citadel user message catalog -- fields, IDs, product alignment |
+| `private/specs/citadel-messages-supplemental.md` | Low-alignment message namespaces (ECitadelGameEvents) |
+| `private/specs/entity-fields-reference.md` | Entity field semantics, gotchas, deprecated fields |
+| `private/specs/entity-fields-supplemental.md` | Background-context entity fields (m_nPlatformType, m_MoveType) |
+| `private/specs/deadlock-api-haste-reference.md` | haste Visitor trait, subscription patterns, parse lifecycle, haste-inspector |
 
 ---
 

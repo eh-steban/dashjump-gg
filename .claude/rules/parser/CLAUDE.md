@@ -111,9 +111,12 @@ docker-compose run --rm dashjump-parser cargo test -- --nocapture
 
 ## Domain References
 
-Before implementing new message listeners, check:
-- `private/specs/citadel-messages-reference.md` -- Citadel protobuf message catalog with fields and product alignment
-- `private/specs/deadlock-api-haste-reference.md` -- haste parse lifecycle, Visitor trait, message subscription patterns
+Before implementing new message listeners or entity subscriptions, check:
+- `private/specs/citadel-messages-reference.md` -- Citadel user message catalog (IDs 300–366): fields, product alignment, implementation notes
+- `private/specs/citadel-messages-supplemental.md` -- Low-alignment message namespaces (ECitadelGameEvents IDs 450–466); load only when investigating engine-level messaging
+- `private/specs/entity-fields-reference.md` -- Entity field semantics, gotchas, and deprecated fields (e.g. removed m_eZipLineLaneColor)
+- `private/specs/entity-fields-supplemental.md` -- Background-context entity fields not load-bearing for current features (m_nPlatformType, m_MoveType)
+- `private/specs/deadlock-api-haste-reference.md` -- haste parse lifecycle, Visitor trait, message subscription patterns, haste-inspector tool
 
 ## Data Flow
 
