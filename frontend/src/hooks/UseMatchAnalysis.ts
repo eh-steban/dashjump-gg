@@ -12,6 +12,7 @@ export function useMatchAnalysis(matchId: number) {
     setError(null);
     try {
       const result = await fetchMatchAnalysis(matchId);
+      console.log('[MatchAnalysis] API response:', result);
       setData(result);
     } catch (err) {
       setError(err);

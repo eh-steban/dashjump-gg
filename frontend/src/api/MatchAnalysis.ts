@@ -107,10 +107,8 @@ export async function fetchMatchAnalysis(
   const data: MatchAnalysisResponse = await res.json();
   cache.set(matchId, { data, etag, expiresAt });
   saveToStorage(matchId);
-  console.log("Loaded match data from backend:", data);
-  // Debug: log creep_waves separately for easy verification
-  if (data.parsed_match_data?.creep_waves) {
-    console.log("[DEBUG] creep_waves:", data.parsed_match_data.creep_waves);
+  if (!data.parsed_match_data?.lane_creep_data) {
+    console.warn("[MatchAnalysis] Response missing lane_creep_data field", { matchId });
   }
   return data;
 }

@@ -1,14 +1,26 @@
-// Creep wave tracking types for lane pressure analysis
+// Creep lane tracking types for per-creep position data
 
-export interface CreepWaveSnapshot {
-  x: number; // Centroid X position
-  y: number; // Centroid Y position
-  count: number; // Number of creeps in the wave
-  team: number; // Team (2 = Amber, 3 = Sapphire)
+export interface CreepSnapshot {
+  x: number;
+  y: number;
+  lane: number;
+  team: number;
+  wave_id: string;
+  nearby_players: number[];
 }
 
-// Key format: "{lane}_{team}" (e.g., "1_2" for lane 1, team 2/Amber)
-// Value: per-second snapshots (null if no wave that second)
-export interface CreepWaveData {
-  waves: Record<string, (CreepWaveSnapshot | null)[]>;
+export interface WaveMeta {
+  lane: number;
+  team: number;
+  spawn_sec: number;
+  last_death_sec: number | null;
+  last_death_x: number | null;
+  last_death_y: number | null;
+}
+
+// creeps: string entity_index -> per-second timeline of snapshots (null if not alive that second)
+// wave_meta: wave_id -> wave metadata including spawn/death info for pin rendering
+export interface LaneCreepData {
+  creeps: Record<string, (CreepSnapshot | null)[]>;
+  wave_meta: Record<string, WaveMeta>;
 }

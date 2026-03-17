@@ -1,7 +1,7 @@
 import { MatchMetadata } from "./matchMetadata";
 import { ParsedPlayer, PlayerMatchData } from "./player";
 import { BossData } from "./boss";
-import { CreepWaveData } from "./creep";
+import { LaneCreepData } from "./creep";
 import { LanePressureData } from "./lanePressure";
 
 // Parsed match data (aggregated by player, per backend ParsedMatchData)
@@ -11,7 +11,7 @@ export interface ParsedMatchData {
   players_data: ParsedPlayer[];
   per_player_data: Record<string, PlayerMatchData>; // key = player_id
   bosses: BossData;
-  creep_waves: CreepWaveData;
+  lane_creep_data: LaneCreepData;
   lane_pressure: LanePressureData;
 }
 
@@ -83,8 +83,9 @@ export const defaultMatchAnalysis: MatchAnalysisResponse = {
       snapshots: [],
       health_timeline: [],
     },
-    creep_waves: {
-      waves: {},
+    lane_creep_data: {
+      creeps: {},
+      wave_meta: {},
     },
     lane_pressure: {
       pressure: {},

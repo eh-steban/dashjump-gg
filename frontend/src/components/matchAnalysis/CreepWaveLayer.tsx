@@ -1,52 +1,83 @@
-import { CreepWaveData } from "../../domain/creep";
-import { LanePressureData } from "../../domain/lanePressure";
+import { LaneCreepData, WaveMeta } from "../../domain/creep";
 import CreepWaveIndicator from "./CreepWaveIndicator";
 
 interface CreepWaveLayerProps {
-  creepWaves: CreepWaveData;
-  lanePressure: LanePressureData;
-  currentTick: number;
+  laneCreepData: LaneCreepData;
+  currentSec: number;
   worldToMinimapPixels: (x: number, y: number) => { left: number; top: number };
 }
 
+// Returns true when a wave pin should be shown at the given second.
+// A pin is shown when the wave has died (last_death_sec is set and passed) AND
+// no newer wave on the same lane+team has also died by that second.
+function isPinVisible(
+  waveId: string,
+  meta: WaveMeta,
+  currentSec: number,
+  allMeta: Record<string, WaveMeta>
+): boolean {
+  if (meta.last_death_sec === null) return false;
+  if (currentSec < meta.last_death_sec) return false;
+
+  // Check if a newer wave (same lane+team, later spawn_sec) has died by now
+  for (const [otherId, other] of Object.entries(allMeta)) {
+    if (otherId === waveId) continue;
+    if (other.lane !== meta.lane || other.team !== meta.team) continue;
+    if (other.spawn_sec <= meta.spawn_sec) continue;
+    if (other.last_death_sec !== null && other.last_death_sec <= currentSec) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 const CreepWaveLayer = ({
-  creepWaves,
-  lanePressure,
-  currentTick,
+  laneCreepData,
+  currentSec,
   worldToMinimapPixels,
 }: CreepWaveLayerProps) => {
   const indicators: React.ReactElement[] = [];
 
-  // Iterate through all lane/team combinations
-  for (const [laneTeamKey, waveSnapshots] of Object.entries(
-    creepWaves.waves
-  )) {
-    // Get wave snapshot for current tick
-    const waveSnapshot =
-      currentTick < waveSnapshots.length ? waveSnapshots[currentTick] : null;
+  // Pass 1 — Live creeps: render individual dots at their current position
+  for (const [entityIndex, timeline] of Object.entries(laneCreepData.creeps)) {
+    const snapshot =
+      currentSec < timeline.length ? timeline[currentSec] : null;
+    if (!snapshot) continue;
 
-    if (!waveSnapshot) {
-      continue; // No wave data for this tick
-    }
-
-    // Get corresponding pressure snapshot
-    const pressureSnapshots = lanePressure.pressure[laneTeamKey];
-    const pressureSnapshot =
-      pressureSnapshots && currentTick < pressureSnapshots.length
-        ? pressureSnapshots[currentTick]
-        : null;
-
-    // Transform world coordinates to minimap pixels
-    const { left, top } = worldToMinimapPixels(waveSnapshot.x, waveSnapshot.y);
+    const { left, top } = worldToMinimapPixels(snapshot.x, snapshot.y);
 
     indicators.push(
       <CreepWaveIndicator
-        key={laneTeamKey}
+        key={`creep-${entityIndex}`}
         left={left}
         top={top}
-        team={waveSnapshot.team}
-        count={waveSnapshot.count}
-        pressure={pressureSnapshot ?? undefined}
+        mode="live"
+        team={snapshot.team}
+      />
+    );
+  }
+
+  // Pass 2 — Pins: render last-death position for the most-recently-dead wave per lane+team
+  for (const [waveId, meta] of Object.entries(laneCreepData.wave_meta)) {
+    if (!isPinVisible(waveId, meta, currentSec, laneCreepData.wave_meta)) {
+      continue;
+    }
+
+    if (meta.last_death_x === null || meta.last_death_y === null) continue;
+
+    const { left, top } = worldToMinimapPixels(
+      meta.last_death_x,
+      meta.last_death_y
+    );
+
+    indicators.push(
+      <CreepWaveIndicator
+        key={`pin-${waveId}`}
+        left={left}
+        top={top}
+        mode="pin"
+        team={meta.team}
       />
     );
   }
@@ -54,4 +85,5 @@ const CreepWaveLayer = ({
   return <>{indicators}</>;
 };
 
+export { isPinVisible };
 export default CreepWaveLayer;

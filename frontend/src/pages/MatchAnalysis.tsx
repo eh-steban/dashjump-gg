@@ -172,6 +172,52 @@ const MatchAnalysis = () => {
     [bossSnapshots]
   );
 
+  // Diagnostic: log lane_creep_data stats once per load. Helps identify frozen-creep bugs:
+  // - "sec-0 creeps" are spawned at match start (expected), but a high count hints at ghost entries
+  // - "lane-0 wave IDs" mean the parser registered a creep before its lane was assigned (bug)
+  // - window.__debugCreepAt(sec) dumps alive creeps at any second for manual inspection
+  useEffect(() => {
+    const data = parsedMatchData.lane_creep_data;
+    if (!data || Object.keys(data.creeps).length === 0) return;
+
+    const creepIds = Object.keys(data.creeps);
+    const sec0Creeps = creepIds.filter((id) => {
+      const t = data.creeps[id];
+      return Array.isArray(t) && t.length > 0 && t[0] !== null;
+    });
+    const lane0Waves = Object.keys(data.wave_meta).filter((id) =>
+      id.startsWith('0_')
+    );
+
+    console.group('[CreepData] Loaded');
+    console.log(
+      `Creeps: ${creepIds.length} total, ${sec0Creeps.length} with snapshot at sec 0`
+    );
+    console.log(`Waves: ${Object.keys(data.wave_meta).length} total`);
+    if (lane0Waves.length > 0) {
+      console.warn('Lane-0 wave IDs (parser bug indicator):', lane0Waves);
+    }
+    if (sec0Creeps.length > 0) {
+      console.log('Creep IDs with sec-0 snapshot:', sec0Creeps);
+    }
+    console.groupEnd();
+
+    if (import.meta.env.MODE === 'development') {
+      (window as unknown as Record<string, unknown>).__debugCreepAt = (
+        sec: number
+      ) => {
+        const alive = creepIds
+          .filter((id) => {
+            const t = data.creeps[id];
+            return Array.isArray(t) && sec < t.length && t[sec] !== null;
+          })
+          .map((id) => ({ id, snapshot: data.creeps[id][sec] }));
+        console.log(`[CreepData] sec ${sec}: ${alive.length} alive`, alive);
+        return alive;
+      };
+    }
+  }, [parsedMatchData.lane_creep_data]);
+
   useEffect(() => {
     isMounted.current = true;
 
@@ -283,8 +329,7 @@ const MatchAnalysis = () => {
                   regions={regions}
                   startRepeat={startRepeat}
                   stopRepeat={stopRepeat}
-                  creepWaves={parsedMatchData.creep_waves}
-                  lanePressure={parsedMatchData.lane_pressure}
+                  laneCreepData={parsedMatchData.lane_creep_data}
                   worldToMinimapPixels={worldToMinimapPixels}
                 />
               </div>

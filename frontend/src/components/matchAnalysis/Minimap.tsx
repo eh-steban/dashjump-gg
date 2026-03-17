@@ -9,8 +9,7 @@ import { Region } from '../../domain/region';
 import { ScaledPlayerCoord, PlayerData } from '../../domain/player';
 import { ScaledBossSnapshot } from '../../domain/boss';
 import { DestroyedObjective } from '../../domain/destroyedObjective';
-import { CreepWaveData } from '../../domain/creep';
-import { LanePressureData } from '../../domain/lanePressure';
+import { LaneCreepData } from '../../domain/creep';
 
 const MINIMAP_URL =
   'https://assets-bucket.deadlock-api.com/assets-api-res/images/maps/minimap.png';
@@ -28,8 +27,7 @@ const Minimap = ({
   players,
   startRepeat,
   stopRepeat,
-  creepWaves,
-  lanePressure,
+  laneCreepData,
   worldToMinimapPixels,
 }: {
   currentSecond: number;
@@ -45,8 +43,7 @@ const Minimap = ({
   players: PlayerData[];
   startRepeat: (direction: 'back' | 'forward') => void;
   stopRepeat: () => void;
-  creepWaves: CreepWaveData;
-  lanePressure: LanePressureData;
+  laneCreepData: LaneCreepData;
   worldToMinimapPixels: (x: number, y: number) => { left: number; top: number };
 }) => {
   const mapRef = useRef<HTMLImageElement>(null);
@@ -105,9 +102,8 @@ const Minimap = ({
             players={players}
           />
           <CreepWaveLayer
-            creepWaves={creepWaves}
-            lanePressure={lanePressure}
-            currentTick={currentSecond}
+            laneCreepData={laneCreepData}
+            currentSec={currentSecond}
             worldToMinimapPixels={worldToMinimapPixels}
           />
         </div>
