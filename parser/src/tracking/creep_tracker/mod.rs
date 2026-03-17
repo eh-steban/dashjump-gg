@@ -199,15 +199,25 @@ impl CreepTracker {
         match_sec: u32,
     ) {
         if let Some(creep) = self.active_creeps.get_mut(&entity_index) {
+            // Always update position for registered creeps. Lane may transiently read 0
+            // during the zipline-to-walking transition; blocking on lane=0 here would freeze
+            // the creep at its landing position.
             creep.x = x;
             creep.y = y;
-        } else {
-            // Creep entered the interest scope without a preceding CREATE -- treat as late create
+        } else if lane != 0 {
+            // Creep entered interest scope without a preceding CREATE -- treat as late create.
+            // Only register if lane is assigned; lane=0 means the entity is still pre-spawn
+            // or in-transit and should not be tracked yet.
             debug!(
-                "[creep_tracker] UPDATE entity={} not in active_creeps -- treating as late CREATE",
-                entity_index
+                "[creep_tracker] UPDATE entity={} not in active_creeps -- treating as late CREATE (lane={})",
+                entity_index, lane
             );
             self.handle_creep_create(entity_index, lane, team, x, y, match_sec);
+        } else {
+            debug!(
+                "[creep_tracker] UPDATE entity={} not in active_creeps with lane=0 -- skipping",
+                entity_index
+            );
         }
     }
 
@@ -345,7 +355,8 @@ impl CreepTracker {
 
         // New wave
         let wave_id = format!("{}_{}_{}", lane, team, current_sec);
-        self.wave_last_spawn.insert(key, (current_sec, wave_id.clone()));
+        self.wave_last_spawn
+            .insert(key, (current_sec, wave_id.clone()));
         self.wave_meta.insert(
             wave_id.clone(),
             WaveMeta {
@@ -361,11 +372,7 @@ impl CreepTracker {
     }
 
     /// Compute which player custom_ids are within `NEARBY_PLAYER_RADIUS` of `(cx, cy)`.
-    fn compute_nearby_players(
-        cx: f32,
-        cy: f32,
-        player_positions: &[(i32, f32, f32)],
-    ) -> Vec<i32> {
+    fn compute_nearby_players(cx: f32, cy: f32, player_positions: &[(i32, f32, f32)]) -> Vec<i32> {
         let radius_sq = NEARBY_PLAYER_RADIUS * NEARBY_PLAYER_RADIUS;
         player_positions
             .iter()

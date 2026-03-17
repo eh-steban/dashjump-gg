@@ -382,22 +382,28 @@ impl Visitor for &mut MyVisitor {
                         match_time_s,
                     );
                 }
-                // Only track creeps after match starts
+                // Only track creeps after match starts and once lane is assigned.
+                // Lane 0 means the entity exists but hasn't been assigned to a lane yet
+                // (pre-spawn state). Registering it would produce a frozen ghost creep
+                // because all subsequent UPDATE events also arrive with lane=0 and are
+                // filtered out before updating its position.
                 if match_started && CreepTracker::is_creep_entity(hash) {
                     let position = get_entity_position(entity);
                     let team: u32 = entity.get_value(&TEAM_KEY).unwrap_or(0);
                     let lane: i32 = entity.get_value(&NPC_LANE_KEY).unwrap_or(0);
-                    let match_time_s = self.total_match_time_s.saturating_sub(
-                        self.match_start_time_s.unwrap_or(0),
-                    );
-                    self.creep_tracker.handle_creep_create(
-                        entity.index(),
-                        lane,
-                        team,
-                        position[0],
-                        position[1],
-                        match_time_s,
-                    );
+                    if lane != 0 {
+                        let match_time_s = self.total_match_time_s.saturating_sub(
+                            self.match_start_time_s.unwrap_or(0),
+                        );
+                        self.creep_tracker.handle_creep_create(
+                            entity.index(),
+                            lane,
+                            team,
+                            position[0],
+                            position[1],
+                            match_time_s,
+                        );
+                    }
                 }
             }
             DeltaHeader::DELETE => {
@@ -414,7 +420,11 @@ impl Visitor for &mut MyVisitor {
                 if !self.lane_data_updated {
                     self.check_and_update_lane_lock(entity)?;
                 }
-                // Update creep positions (only if match started)
+                // Update creep positions (only if match started).
+                // Lane=0 filtering is handled inside handle_creep_update: already-registered
+                // creeps always receive position updates (their lane may transiently read 0
+                // during the zipline-to-walking transition), while unregistered entities with
+                // lane=0 are skipped to prevent ghost creep registration.
                 if match_started && CreepTracker::is_creep_entity(hash) {
                     let position = get_entity_position(entity);
                     let team: u32 = entity.get_value(&TEAM_KEY).unwrap_or(0);
