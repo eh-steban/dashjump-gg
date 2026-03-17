@@ -73,6 +73,9 @@ See `.claude/rules/` for detailed standards:
 - `parser/` -- Rust conventions
 - `git.md` -- Commit message conventions
 
+### Writing Style
+- Use `--` (double-hyphen) instead of em-dashes (`—`) in all prose, docs, and commit messages. Em-dashes render as `<E2><80><94>` in git diffs and terminals.
+
 ## Infrastructure
 
 See `.claude/rules/infra/` for infrastructure and deployment:
