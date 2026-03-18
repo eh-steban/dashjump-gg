@@ -21,6 +21,10 @@ pub struct CreepSnapshot {
     pub wave_id: String,
     /// Player custom_ids (lobby_player_slot) within 1500 world units of this creep
     pub nearby_players: Vec<i32>,
+    /// True when this creep is still in its cage on the zipline (pre-lane-drop).
+    /// Cage entities have m_iHealth == 1 and are visual carriers -- not fighting units.
+    /// They appear on the minimap as "wave inbound" indicators.
+    pub is_cage: bool,
 }
 
 /// Match-relative sparse timeline for one individual creep.

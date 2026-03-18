@@ -3,11 +3,16 @@ use std::collections::HashMap;
 use tracing::{debug, info};
 
 use crate::domain::{CreepSnapshot, CreepTimeline, LaneCreepData, WaveMeta};
+use crate::entities::constants::{CAGE_ENTITY_HEALTH, LIFE_ALIVE, LIFE_DEAD, NPC_STATE_INERT, NPC_STATE_INIT, NPC_STATE_INVALID};
 
-/// Maximum gap in seconds between consecutive creep spawns in the same (lane, team) for them
-/// to be assigned to the same wave. Waves fire every ~30 seconds; 5 seconds gives a safe
-/// window to group the 4 creeps in a single wave without spanning into the next wave.
-const WAVE_GROUPING_WINDOW_S: u32 = 5;
+/// Maximum gap between consecutive cage-entity spawns for them to be assigned to the same wave.
+/// Cage entities (health=1) launch in tight clusters of 4; a 5-second window safely groups them.
+const CAGE_GROUPING_WINDOW_S: u32 = 5;
+
+/// Maximum lookback for a real lane creep (health>1) to find and join a preceding cage wave.
+/// Cage entities launch ~13-15 seconds before real creeps land. 18 seconds covers this gap
+/// while staying safely below the ~30-second distance to the next cage wave launch.
+const REAL_CREEP_GROUPING_WINDOW_S: u32 = 18;
 
 /// Maximum world-unit distance between a player and a creep for the player to be considered
 /// "nearby" -- i.e., contesting that creep's lane position.
@@ -22,6 +27,8 @@ struct ActiveCreep {
     x: f32,
     y: f32,
     wave_id: String,
+    life_state: u8,
+    is_cage: bool,
 }
 
 /// Tracks individual lane creep (trooper) entities throughout the match.
@@ -74,6 +81,13 @@ impl CreepTracker {
     ///
     /// Assigns the creep to an existing wave or creates a new one based on spawn time.
     /// `match_sec` is the current match-relative second (0 = game start).
+    /// `npc_state` is the current value of `m_NPCState`; if INERT, the creep is pre-spawn
+    /// or recycling and registration is skipped.
+    /// `life_state` is the current value of `m_lifeState` (0 = ALIVE, 2 = DEAD); stored on
+    /// the active creep and used to detect entity reuse via DEAD->ALIVE transitions.
+    /// `health` is the current value of `m_iHealth`; if equal to `CAGE_ENTITY_HEALTH` (1), the
+    /// entity is a visual cage/zipline-carrier sprite. It is registered with `is_cage: true` so
+    /// it appears on the minimap as a "wave inbound" indicator.
     pub fn handle_creep_create(
         &mut self,
         entity_index: i32,
@@ -82,12 +96,31 @@ impl CreepTracker {
         x: f32,
         y: f32,
         match_sec: u32,
+        npc_state: i32,
+        life_state: u8,
+        health: i32,
     ) {
-        let wave_id = self.assign_wave(lane, team, match_sec);
+        if matches!(npc_state, NPC_STATE_INERT | NPC_STATE_INIT | NPC_STATE_INVALID) {
+            debug!(
+                "[creep_tracker] CREATE entity={} -- npc_state={} (inactive), skipping registration",
+                entity_index, npc_state
+            );
+            return;
+        }
+
+        let is_cage = health <= CAGE_ENTITY_HEALTH;
+        if is_cage {
+            debug!(
+                "[creep_tracker] CREATE entity={} -- registering as cage entity (health=1)",
+                entity_index
+            );
+        }
+
+        let wave_id = self.assign_wave(lane, team, match_sec, is_cage);
 
         debug!(
-            "[creep_tracker] CREATE entity={} lane={} team={} wave_id={} pos=({:.0},{:.0})",
-            entity_index, lane, team, wave_id, x, y
+            "[creep_tracker] CREATE entity={} lane={} team={} wave_id={} npc_state={} life_state={} health={} is_cage={} pos=({:.0},{:.0})",
+            entity_index, lane, team, wave_id, npc_state, life_state, health, is_cage, x, y
         );
 
         let creep = ActiveCreep {
@@ -97,6 +130,8 @@ impl CreepTracker {
             x,
             y,
             wave_id,
+            life_state,
+            is_cage,
         };
 
         self.active_creeps.insert(entity_index, creep);
@@ -150,7 +185,17 @@ impl CreepTracker {
     /// Handle position update for a creep that is already active.
     ///
     /// If the creep is not yet in `active_creeps` (e.g., pre-existing entity picked up mid
-    /// stream), it is registered with a fresh wave assignment.
+    /// stream), it is registered with a fresh wave assignment provided it has an active state.
+    ///
+    /// For registered creeps:
+    /// - A DEAD->ALIVE transition on `life_state` signals entity reuse for a new wave: the
+    ///   old wave's death metadata is pinned (if this was the last creep in the wave) and the
+    ///   entity receives a new `wave_id` via `assign_wave`.
+    /// - All updates: position and life_state are updated in place (no eviction).
+    ///   Snapshot suppression for DEAD creeps is handled in `build_creep_snapshot`.
+    ///
+    /// For unregistered creeps: only register when lane != 0 and npc_state is active.
+    /// Cage entities (health <= CAGE_ENTITY_HEALTH) are registered with `is_cage: true`.
     pub fn handle_creep_update(
         &mut self,
         entity_index: i32,
@@ -159,26 +204,84 @@ impl CreepTracker {
         x: f32,
         y: f32,
         match_sec: u32,
+        npc_state: i32,
+        life_state: u8,
+        health: i32,
     ) {
-        if let Some(creep) = self.active_creeps.get_mut(&entity_index) {
-            // Always update position for registered creeps. Lane may transiently read 0
-            // during the zipline-to-walking transition; blocking on lane=0 here would freeze
-            // the creep at its landing position.
-            creep.x = x;
-            creep.y = y;
-        } else if lane != 0 {
+        if self.active_creeps.contains_key(&entity_index) {
+            // Read old life_state and wave_id while holding an immutable borrow.
+            let (old_life_state, old_wave_id) = {
+                let c = &self.active_creeps[&entity_index];
+                (c.life_state, c.wave_id.clone())
+            };
+
+            if old_life_state == LIFE_DEAD && life_state == LIFE_ALIVE {
+                // DEAD->ALIVE transition: the engine is reusing this entity slot for a new wave.
+                // Pin death metadata on the old wave if this was the last registered creep in it.
+                debug!(
+                    "[creep_tracker] UPDATE entity={} DEAD->ALIVE -- pinning old wave {} and re-assigning",
+                    entity_index, old_wave_id
+                );
+
+                let alive_in_wave = self
+                    .active_creeps
+                    .values()
+                    .filter(|c| c.entity_index != entity_index && c.wave_id == old_wave_id)
+                    .count();
+
+                if alive_in_wave == 0 {
+                    if let Some(meta) = self.wave_meta.get_mut(&old_wave_id) {
+                        meta.last_death_sec = Some(match_sec);
+                        meta.last_death_x = Some(x);
+                        meta.last_death_y = Some(y);
+                        debug!(
+                            "[creep_tracker] Wave {} fully recycled (DEAD->ALIVE) at sec={} pos=({:.0},{:.0})",
+                            old_wave_id, match_sec, x, y
+                        );
+                    }
+                }
+
+                // Assign a new wave for the recycled entity. `assign_wave` mutably borrows self,
+                // so the immutable borrow on `old_wave_id` must already be dropped (it is, since
+                // it was cloned above). Read is_cage from the stored active creep before the
+                // mutable borrow.
+                let recycled_is_cage = self.active_creeps[&entity_index].is_cage;
+                let new_wave_id = self.assign_wave(lane, team, match_sec, recycled_is_cage);
+
+                let creep = self.active_creeps.get_mut(&entity_index).unwrap();
+                creep.x = x;
+                creep.y = y;
+                creep.wave_id = new_wave_id;
+                creep.life_state = life_state;
+            } else {
+                // Normal update: keep tracking, update position and life_state in place.
+                // DEAD life_state means snapshot emission is suppressed in build_creep_snapshot
+                // rather than evicting the creep entirely.
+                let creep = self.active_creeps.get_mut(&entity_index).unwrap();
+                creep.x = x;
+                creep.y = y;
+                creep.life_state = life_state;
+
+                if life_state == LIFE_DEAD {
+                    debug!(
+                        "[creep_tracker] UPDATE entity={} life_state=DEAD -- suppressing snapshots but keeping in active_creeps",
+                        entity_index
+                    );
+                }
+            }
+        } else if lane != 0 && !matches!(npc_state, NPC_STATE_INERT | NPC_STATE_INIT | NPC_STATE_INVALID) {
             // Creep entered interest scope without a preceding CREATE -- treat as late create.
-            // Only register if lane is assigned; lane=0 means the entity is still pre-spawn
-            // or in-transit and should not be tracked yet.
+            // Only register if lane is assigned and npc_state is active; lane=0 or INERT means
+            // the entity is still pre-spawn or recycling and should not be tracked yet.
             debug!(
-                "[creep_tracker] UPDATE entity={} not in active_creeps -- treating as late CREATE (lane={})",
-                entity_index, lane
+                "[creep_tracker] UPDATE entity={} not in active_creeps -- treating as late CREATE (lane={} npc_state={})",
+                entity_index, lane, npc_state
             );
-            self.handle_creep_create(entity_index, lane, team, x, y, match_sec);
+            self.handle_creep_create(entity_index, lane, team, x, y, match_sec, npc_state, life_state, health);
         } else {
             debug!(
-                "[creep_tracker] UPDATE entity={} not in active_creeps with lane=0 -- skipping",
-                entity_index
+                "[creep_tracker] UPDATE entity={} not in active_creeps -- skipping (lane={} npc_state={})",
+                entity_index, lane, npc_state
             );
         }
     }
@@ -224,20 +327,26 @@ impl CreepTracker {
         let active_indices: Vec<i32> = self.active_creeps.keys().copied().collect();
 
         for entity_index in &active_indices {
-            let (lane, team, x, y, wave_id) = {
+            let (lane, team, x, y, wave_id, life_state, is_cage) = {
                 let c = &self.active_creeps[entity_index];
-                (c.lane, c.team, c.x, c.y, c.wave_id.clone())
+                (c.lane, c.team, c.x, c.y, c.wave_id.clone(), c.life_state, c.is_cage)
             };
 
-            let nearby_players = Self::compute_nearby_players(x, y, player_positions);
-
-            let snapshot = CreepSnapshot {
-                x,
-                y,
-                lane,
-                team,
-                wave_id,
-                nearby_players,
+            // Suppress snapshot when creep is dead. Emit None so the timeline slot is filled
+            // but the frontend does not render a ghost creep at the wrong location.
+            let entry = if life_state == LIFE_DEAD {
+                None
+            } else {
+                let nearby_players = Self::compute_nearby_players(x, y, player_positions);
+                Some(CreepSnapshot {
+                    x,
+                    y,
+                    lane,
+                    team,
+                    wave_id,
+                    nearby_players,
+                    is_cage,
+                })
             };
 
             let timeline = self.creep_timelines.entry(*entity_index).or_default();
@@ -246,10 +355,10 @@ impl CreepTracker {
                 timeline.push(None);
             }
             if timeline.len() == match_sec as usize {
-                timeline.push(Some(snapshot));
+                timeline.push(entry);
             } else {
                 // Already has an entry for this second (shouldn't happen, but overwrite to be safe)
-                timeline[match_sec as usize] = Some(snapshot);
+                timeline[match_sec as usize] = entry;
             }
         }
 
@@ -272,7 +381,27 @@ impl CreepTracker {
     }
 
     /// Get the final output for JSON serialization.
+    ///
+    /// wave_meta is filtered to only include waves that have at least one live snapshot in a
+    /// creep timeline. Orphan waves (registered but evicted before any snapshot was emitted --
+    /// typically a CREATE followed immediately by an INERT transition in the same tick) are
+    /// excluded to prevent downstream consumers from encountering wave IDs they cannot resolve.
     pub fn get_output(&self) -> LaneCreepData {
+        // Collect all wave IDs referenced by at least one non-null snapshot.
+        let mut live_wave_ids: std::collections::HashSet<&str> =
+            std::collections::HashSet::new();
+        for timeline in self.creep_timelines.values() {
+            for snap in timeline.iter().flatten() {
+                live_wave_ids.insert(snap.wave_id.as_str());
+            }
+        }
+
+        let orphan_count = self
+            .wave_meta
+            .keys()
+            .filter(|id| !live_wave_ids.contains(id.as_str()))
+            .count();
+
         let total_creeps = self.creep_timelines.len();
         let total_waves = self.wave_meta.len();
         let non_null: usize = self
@@ -282,9 +411,19 @@ impl CreepTracker {
             .filter(|s| s.is_some())
             .count();
 
+        if orphan_count > 0 {
+            info!(
+                "[creep_tracker] Dropping {} orphan wave(s) with no live snapshots (registered then immediately evicted)",
+                orphan_count
+            );
+        }
+
         info!(
-            "[creep_tracker] Output: {} creeps, {} waves, {} non-null snapshots",
-            total_creeps, total_waves, non_null
+            "[creep_tracker] Output: {} creeps, {} waves ({} after orphan removal), {} non-null snapshots",
+            total_creeps,
+            total_waves,
+            total_waves.saturating_sub(orphan_count),
+            non_null
         );
 
         LaneCreepData {
@@ -293,7 +432,12 @@ impl CreepTracker {
                 .iter()
                 .map(|(k, v)| (k.to_string(), v.clone()))
                 .collect(),
-            wave_meta: self.wave_meta.clone(),
+            wave_meta: self
+                .wave_meta
+                .iter()
+                .filter(|(id, _)| live_wave_ids.contains(id.as_str()))
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
         }
     }
 
@@ -303,14 +447,19 @@ impl CreepTracker {
 
     /// Assign a creep to a wave based on spawn time.
     ///
-    /// If a wave already exists for `(lane, team)` and the last spawn was within
-    /// `WAVE_GROUPING_WINDOW_S` seconds, the creep joins that wave.
-    /// Otherwise a new wave is created with `wave_id = "lane_team_spawnsec"`.
-    fn assign_wave(&mut self, lane: i32, team: u32, current_sec: u32) -> String {
+    /// If a wave already exists for `(lane, team)` and the last spawn was within the
+    /// applicable grouping window, the creep joins that wave. Otherwise a new wave is
+    /// created with `wave_id = "lane_team_spawnsec"`.
+    ///
+    /// `is_cage` selects the window: cage entities use `CAGE_GROUPING_WINDOW_S` (5 s) to
+    /// group their tight launch cluster; real creeps use `REAL_CREEP_GROUPING_WINDOW_S`
+    /// (18 s) so they can look back and join the cage wave that preceded them by 13-15 s.
+    fn assign_wave(&mut self, lane: i32, team: u32, current_sec: u32, is_cage: bool) -> String {
         let key = (lane, team);
+        let window = if is_cage { CAGE_GROUPING_WINDOW_S } else { REAL_CREEP_GROUPING_WINDOW_S };
 
         if let Some((last_sec, wave_id)) = self.wave_last_spawn.get(&key) {
-            if current_sec.saturating_sub(*last_sec) <= WAVE_GROUPING_WINDOW_S {
+            if current_sec.saturating_sub(*last_sec) <= window {
                 return wave_id.clone();
             }
         }

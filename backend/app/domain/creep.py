@@ -13,6 +13,10 @@ class CreepSnapshot(SQLModel):
     team: int
     wave_id: str  # "lane_team_spawnsec" e.g. "1_2_45"
     nearby_players: list[int]  # player custom_ids within 1500 world units
+    # True when this creep is still in its cage on the zipline (pre-lane-drop).
+    # Cage entities have m_iHealth == 1 and are visual carriers, not fighting units.
+    # They appear on the minimap as "wave inbound" indicators.
+    is_cage: bool = False
 
 
 class WaveMeta(SQLModel):

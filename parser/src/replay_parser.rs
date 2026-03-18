@@ -343,11 +343,11 @@ impl Visitor for &mut MyVisitor {
             self.damage.push(std::mem::take(&mut self.damage_window));
             self.positions
                 .push(std::mem::take(&mut self.positions_window));
-            if this_window == 0 {
-                self.total_match_time_s = this_window;
-            } else {
-                self.total_match_time_s = this_window - 1;
-            }
+            // Track match-relative duration (0-indexed from match start).
+            // `match_window` is already the correct match-relative second; using
+            // `this_window` here would produce the absolute recording time, which
+            // is `match_start_time_s` seconds larger than the match duration.
+            self.total_match_time_s = match_window;
         }
 
         Ok(())
@@ -391,6 +391,14 @@ impl Visitor for &mut MyVisitor {
                     let position = get_entity_position(entity);
                     let team: u32 = entity.get_value(&TEAM_KEY).unwrap_or(0);
                     let lane: i32 = entity.get_value(&NPC_LANE_KEY).unwrap_or(0);
+                    let npc_state: i32 = entity
+                        .get_value::<u32>(&NPC_STATE_KEY)
+                        .map(|v| v as i32)
+                        .unwrap_or(NPC_STATE_INVALID);
+                    let life_state: u8 = entity
+                        .get_value::<u8>(&LIFE_STATE_KEY)
+                        .unwrap_or(LIFE_ALIVE);
+                    let health: i32 = entity.get_value(&HEALTH_KEY).unwrap_or(0);
                     if lane != 0 {
                         let match_time_s = self.total_match_time_s.saturating_sub(
                             self.match_start_time_s.unwrap_or(0),
@@ -402,6 +410,9 @@ impl Visitor for &mut MyVisitor {
                             position[0],
                             position[1],
                             match_time_s,
+                            npc_state,
+                            life_state,
+                            health,
                         );
                     }
                 }
@@ -429,6 +440,14 @@ impl Visitor for &mut MyVisitor {
                     let position = get_entity_position(entity);
                     let team: u32 = entity.get_value(&TEAM_KEY).unwrap_or(0);
                     let lane: i32 = entity.get_value(&NPC_LANE_KEY).unwrap_or(0);
+                    let npc_state: i32 = entity
+                        .get_value::<u32>(&NPC_STATE_KEY)
+                        .map(|v| v as i32)
+                        .unwrap_or(NPC_STATE_INVALID);
+                    let life_state: u8 = entity
+                        .get_value::<u8>(&LIFE_STATE_KEY)
+                        .unwrap_or(LIFE_ALIVE);
+                    let health: i32 = entity.get_value(&HEALTH_KEY).unwrap_or(0);
                     let match_time_s = self.total_match_time_s.saturating_sub(
                         self.match_start_time_s.unwrap_or(0),
                     );
@@ -439,6 +458,9 @@ impl Visitor for &mut MyVisitor {
                         position[0],
                         position[1],
                         match_time_s,
+                        npc_state,
+                        life_state,
+                        health,
                     );
                 }
             }

@@ -7,6 +7,8 @@ export interface CreepSnapshot {
   team: number;
   wave_id: string;
   nearby_players: number[];
+  /** True when this creep is still in its cage on the zipline (pre-lane-drop). */
+  is_cage: boolean;
 }
 
 export interface WaveMeta {
