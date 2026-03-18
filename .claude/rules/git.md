@@ -82,3 +82,47 @@ Breaking changes MUST be indicated in one of two ways:
 | `fix: correct creep wave count off-by-one` | `fix: change <= 4 to < 4 in creep entity loop condition` |
 | `feat(parser): expose boss state in output` | `feat(parser): add boss_snapshots: Vec<BossSnapshot> field and serialize with serde` |
 | `chore: upgrade parser dependencies` | `chore: run cargo update and bump serde from 1.0.195 to 1.0.197` |
+
+---
+
+## Worktree Workflow
+
+Use a git worktree when a change needs to land on `main` independently of in-progress feature work
+-- e.g. a dependency migration, a chore, or a hotfix that other branches will need to consume.
+
+### Setup
+
+```bash
+# Branch off main into a sibling directory
+git worktree add ../dashjump-gg-[short-name] -b [branch-name] main
+
+# Work in the new worktree (open a new Claude Code instance or cd into it)
+cd ../dashjump-gg-[short-name]
+```
+
+Use a sibling directory (not a subdirectory of the repo). Docker Compose volume mounts and build
+caches use relative paths -- a sibling keeps them predictable and lets each worktree run the full
+stack independently if needed.
+
+### Merge and rebase
+
+After the worktree branch is committed and merged to `main`:
+
+```bash
+# Remove the worktree
+git worktree remove ../dashjump-gg-[short-name]
+git branch -d [branch-name]
+
+# Rebase any dependent feature branches onto updated main
+cd /home/lifted/Code/dashjump-gg
+git rebase main
+```
+
+### When to use it
+
+| Scenario | Worktree? |
+|----------|-----------|
+| Dependency migration that unblocks a feature branch | yes |
+| Hotfix needed on main while feature work is active | yes |
+| Normal feature work with no active conflicting branch | no |
+| Quick fix on the current branch | no |

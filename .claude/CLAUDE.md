@@ -123,6 +123,7 @@ This project uses a Product Kata-driven development workflow.
 - Product strategy: `private/product/strategy/`
 - Active experiments: `private/product/experiments/` (find `Status: active-experiment`)
 - Feature specs: `private/specs/`
+- Plans: `private/plans/` -- use `private/templates/plan.md` when creating a new plan
 - Machine-switch state: `private/CONTEXT.md` (read at session start only)
 
 ### Knowledge Management
