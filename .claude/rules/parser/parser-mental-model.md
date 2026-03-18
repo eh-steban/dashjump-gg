@@ -242,9 +242,41 @@ Spawn-time grouping fixes both: wave identity is assigned once and never changes
 ### Entity Lifecycle in Deadlock Demos (Lane Creeps)
 
 - CREATE fires close to actual spawn (within 1–2 ticks). Pre-match creeps have `m_iLane == 0` and are gated out before the tracker sees them (gated by `match_started` in `replay_parser.rs::on_entity`).
-- DELETE fires reliably on creep death for lane creeps (the lane is always in the demo recorder's interest scope).
-- The same `entity_index` is **not reused** within a match.
-- There is **no double-CREATE** across the zipline/in-lane transition — the entity is created once and updated via UPDATE events throughout its lifetime.
+- **DELETE does NOT fire reliably on creep death.** Some entities persist in the demo with their last-alive state (`life_state=ALIVE`, `npc_state=COMBAT`) for up to several minutes after dying in game. DELETE eventually fires -- often triggered by a game event like a guardian being destroyed, not the creep's own death. Do not rely on DELETE as the primary death signal.
+- **Entity indices ARE reused within a match.** Deadlock reuses entity slots for new waves (DEAD→ALIVE in-place recycling). The `CreepTracker` detects this via a `life_state == LIFE_DEAD → life_state == LIFE_ALIVE` transition in `handle_creep_update` and re-assigns a new `wave_id`.
+- There is **no double-CREATE** across the zipline/in-lane transition -- the entity is created once and updated via UPDATE events throughout its lifetime.
+
+### CNPC_Trooper State Machine
+
+Confirmed observable states (from probe + live testing):
+
+| `m_NPCState` | `m_lifeState` | Meaning | Render? |
+|---|---|---|---|
+| IDLE (1) | ALIVE (0) | Active in lane, no target | Yes |
+| ALERT (2) | ALIVE (0) | Spotted enemy, approaching | Yes |
+| COMBAT (3) | ALIVE (0) | Actively fighting | Yes |
+| INERT (6) | ALIVE (0) | Stunned mid-lane (or pre-spawn) | Yes -- stunned ≠ dead |
+| INERT (6) | DYING (1) or DEAD (2) | Recycling back to base | No |
+| DYING_CITADEL (10) | DYING (1) | Death animation playing | No |
+| DEAD_CITADEL (12) | DEAD (2) | Dead, waiting at base for next wave | No |
+| INIT (0) | any | Pre-spawn, uninitialized | No |
+| INVALID (-1) | any | Sentinel / unknown | No |
+
+**Known limitation:** Some creep entities in Valve's demo never receive a death state update. They retain `ALIVE + COMBAT` from their last fighting state until a DELETE event fires (which may be triggered by an objective being destroyed, not the creep's own death). These entities appear frozen on the minimap at the death position until the game event cleans them up. This is a Valve demo behavior -- not fixable at the application level.
+
+### Whitelist Approach for Snapshot Suppression
+
+**Rule: use a whitelist, not a blacklist, for entity visibility.**
+
+A blacklist (suppress known-dead states) fails silently whenever an undocumented or intermediate state is encountered. A whitelist (emit only when in known-alive states) fails safely -- unrecognized states become invisible rather than visible.
+
+```rust
+// Whitelist: emit only when confirmed alive in lane
+let is_active = life_state == LIFE_ALIVE
+    && matches!(npc_state, NPC_STATE_IDLE | NPC_STATE_ALERT | NPC_STATE_COMBAT | NPC_STATE_INERT);
+```
+
+`NPC_STATE_INERT` is included because it covers stunned creeps (alive, not fighting) AND cage entities traveling the zipline (both legitimate render cases). The `life_state == LIFE_ALIVE` guard correctly excludes INERT entities that are dead-and-recycling.
 
 ---
 
