@@ -1,5 +1,8 @@
 use super::*;
-use crate::entities::constants::{CAGE_ENTITY_HEALTH, LIFE_ALIVE, LIFE_DEAD, NPC_STATE_COMBAT, NPC_STATE_IDLE, NPC_STATE_INERT};
+use crate::entities::constants::{
+    CAGE_ENTITY_HEALTH, LIFE_ALIVE, LIFE_DEAD, LIFE_DYING, NPC_STATE_COMBAT, NPC_STATE_DEAD_CITADEL,
+    NPC_STATE_DYING_CITADEL, NPC_STATE_IDLE, NPC_STATE_INERT,
+};
 
 /// Typical health value for a real lane creep (fighting unit).
 const NORMAL_HEALTH: i32 = 350;
@@ -213,8 +216,7 @@ fn test_create_with_inert_state_skips_registration() {
 }
 
 // -------------------------------------------------------------------------
-// LIFE_DEAD: UPDATE on registered creep with LIFE_DEAD keeps it in active_creeps
-// but suppresses snapshot emission.
+// LIFE_DEAD: snapshot suppressed but creep stays in active_creeps
 // -------------------------------------------------------------------------
 #[test]
 fn test_life_dead_suppresses_snapshot_but_keeps_tracking() {
@@ -249,9 +251,7 @@ fn test_life_dead_suppresses_snapshot_but_keeps_tracking() {
 }
 
 // -------------------------------------------------------------------------
-// NPC_STATE_INERT: UPDATE on registered creep with INERT does not pin wave death
-// or change wave_id (creep is still registered, snapshots suppressed at snapshot
-// layer via LIFE_DEAD, not via npc_state).
+// NPC_STATE_INERT + ALIVE: snapshot emits but wave death pin does not fire
 // -------------------------------------------------------------------------
 #[test]
 fn test_inert_on_last_registered_creep_does_not_pin_wave_death() {
@@ -478,4 +478,109 @@ fn test_create_with_normal_health_not_cage() {
     let timeline = tracker.creep_timelines.get(&1).expect("timeline should exist");
     let snapshot = timeline[30].as_ref().expect("snapshot should exist at sec 30");
     assert!(!snapshot.is_cage, "CreepSnapshot must have is_cage=false for normal creep");
+}
+
+// -------------------------------------------------------------------------
+// NPC_STATE_DYING_CITADEL + LIFE_DYING: creep in death animation must not render
+// -------------------------------------------------------------------------
+#[test]
+fn test_npc_state_dying_citadel_suppresses_snapshot() {
+    let mut tracker = make_tracker();
+    let no_players: Vec<(i32, f32, f32)> = vec![];
+
+    // Register a normal creep and emit alive snapshot
+    tracker.handle_creep_create(1, 1, 2, 100.0, 100.0, 30, NPC_STATE_IDLE, LIFE_ALIVE, NORMAL_HEALTH);
+    tracker.build_creep_snapshot(30, &no_players);
+    let timeline = tracker.creep_timelines.get(&1).expect("timeline should exist");
+    assert!(timeline[30].is_some(), "snapshot at sec 30 should be Some while ALIVE");
+
+    // Transition to LIFE_DYING + NPC_STATE_DYING_CITADEL (death animation)
+    tracker.handle_creep_update(1, 1, 2, 100.0, 100.0, 31, NPC_STATE_DYING_CITADEL, LIFE_DYING, NORMAL_HEALTH);
+    assert!(
+        tracker.active_creeps.contains_key(&1),
+        "creep should remain in active_creeps during death animation"
+    );
+
+    // Snapshot must be suppressed -- creep is frozen at death position, not marching
+    tracker.build_creep_snapshot(31, &no_players);
+    let timeline = tracker.creep_timelines.get(&1).expect("timeline should exist");
+    assert!(
+        timeline[31].is_none(),
+        "snapshot at sec 31 should be None during NPC_STATE_DYING_CITADEL death animation"
+    );
+}
+
+// -------------------------------------------------------------------------
+// NPC_STATE_DEAD_CITADEL + LIFE_DEAD: creep waiting at base must not render
+// -------------------------------------------------------------------------
+#[test]
+fn test_npc_state_dead_citadel_suppresses_snapshot() {
+    let mut tracker = make_tracker();
+    let no_players: Vec<(i32, f32, f32)> = vec![];
+
+    // Register a normal creep and emit alive snapshot
+    tracker.handle_creep_create(1, 1, 2, 200.0, 200.0, 40, NPC_STATE_IDLE, LIFE_ALIVE, NORMAL_HEALTH);
+    tracker.build_creep_snapshot(40, &no_players);
+    let timeline = tracker.creep_timelines.get(&1).expect("timeline should exist");
+    assert!(timeline[40].is_some(), "snapshot at sec 40 should be Some while ALIVE");
+
+    // Transition to LIFE_DEAD (life_state=2) + NPC_STATE_DEAD_CITADEL (dead, at base)
+    tracker.handle_creep_update(1, 1, 2, 200.0, 200.0, 41, NPC_STATE_DEAD_CITADEL, LIFE_DEAD, NORMAL_HEALTH);
+    assert!(
+        tracker.active_creeps.contains_key(&1),
+        "creep should remain in active_creeps in NPC_STATE_DEAD_CITADEL"
+    );
+
+    // Snapshot must be suppressed
+    tracker.build_creep_snapshot(41, &no_players);
+    let timeline = tracker.creep_timelines.get(&1).expect("timeline should exist");
+    assert!(
+        timeline[41].is_none(),
+        "snapshot at sec 41 should be None during NPC_STATE_DEAD_CITADEL"
+    );
+}
+
+// -------------------------------------------------------------------------
+// Whitelist: NPC_STATE_INERT + LIFE_ALIVE emits a snapshot (stunned/cage, still visible)
+// -------------------------------------------------------------------------
+#[test]
+fn test_npc_state_inert_alive_shows_snapshot() {
+    let mut tracker = make_tracker();
+    let no_players: Vec<(i32, f32, f32)> = vec![];
+
+    // Register a creep as ALIVE + INERT (stunned mid-lane)
+    tracker.handle_creep_create(1, 1, 2, 300.0, 300.0, 50, NPC_STATE_IDLE, LIFE_ALIVE, NORMAL_HEALTH);
+    tracker.handle_creep_update(1, 1, 2, 310.0, 310.0, 51, NPC_STATE_INERT, LIFE_ALIVE, NORMAL_HEALTH);
+
+    tracker.build_creep_snapshot(51, &no_players);
+    let timeline = tracker.creep_timelines.get(&1).expect("timeline should exist");
+    assert!(
+        timeline[51].is_some(),
+        "snapshot at sec 51 should be Some for INERT+ALIVE (stunned creep is still visible)"
+    );
+}
+
+// -------------------------------------------------------------------------
+// Whitelist: NPC_STATE_INERT + LIFE_DEAD suppresses snapshot (recycling, must not render)
+// -------------------------------------------------------------------------
+#[test]
+fn test_npc_state_inert_dead_suppresses_snapshot() {
+    let mut tracker = make_tracker();
+    let no_players: Vec<(i32, f32, f32)> = vec![];
+
+    // Register a creep as ALIVE, then transition to INERT + DEAD (recycling)
+    tracker.handle_creep_create(1, 1, 2, 400.0, 400.0, 60, NPC_STATE_IDLE, LIFE_ALIVE, NORMAL_HEALTH);
+    tracker.build_creep_snapshot(60, &no_players);
+    let timeline = tracker.creep_timelines.get(&1).expect("timeline should exist");
+    assert!(timeline[60].is_some(), "snapshot at sec 60 should be Some while ALIVE");
+
+    // Creep transitions to INERT + DEAD (recycling back to base)
+    tracker.handle_creep_update(1, 1, 2, 400.0, 400.0, 61, NPC_STATE_INERT, LIFE_DEAD, NORMAL_HEALTH);
+
+    tracker.build_creep_snapshot(61, &no_players);
+    let timeline = tracker.creep_timelines.get(&1).expect("timeline should exist");
+    assert!(
+        timeline[61].is_none(),
+        "snapshot at sec 61 should be None for INERT+DEAD (recycling creep must not render)"
+    );
 }

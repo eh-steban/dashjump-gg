@@ -3,7 +3,11 @@ use std::collections::HashMap;
 use tracing::{debug, info};
 
 use crate::domain::{CreepSnapshot, CreepTimeline, LaneCreepData, WaveMeta};
-use crate::entities::constants::{CAGE_ENTITY_HEALTH, LIFE_ALIVE, LIFE_DEAD, NPC_STATE_INERT, NPC_STATE_INIT, NPC_STATE_INVALID};
+use crate::entities::constants::{
+    CAGE_ENTITY_HEALTH, LIFE_ALIVE, LIFE_DEAD, NPC_STATE_ALERT, NPC_STATE_COMBAT,
+    NPC_STATE_DEAD_CITADEL, NPC_STATE_DYING_CITADEL, NPC_STATE_IDLE, NPC_STATE_INERT,
+    NPC_STATE_INIT, NPC_STATE_INVALID,
+};
 
 /// Maximum gap between consecutive cage-entity spawns for them to be assigned to the same wave.
 /// Cage entities (health=1) launch in tight clusters of 4; a 5-second window safely groups them.
@@ -28,6 +32,7 @@ struct ActiveCreep {
     y: f32,
     wave_id: String,
     life_state: u8,
+    npc_state: i32,
     is_cage: bool,
 }
 
@@ -131,6 +136,7 @@ impl CreepTracker {
             y,
             wave_id,
             life_state,
+            npc_state,
             is_cage,
         };
 
@@ -253,19 +259,26 @@ impl CreepTracker {
                 creep.y = y;
                 creep.wave_id = new_wave_id;
                 creep.life_state = life_state;
+                creep.npc_state = npc_state;
             } else {
-                // Normal update: keep tracking, update position and life_state in place.
-                // DEAD life_state means snapshot emission is suppressed in build_creep_snapshot
-                // rather than evicting the creep entirely.
+                // Normal update: keep tracking, update position, life_state, and npc_state in
+                // place. DEAD life_state or a death npc_state means snapshot emission is
+                // suppressed in build_creep_snapshot rather than evicting the creep entirely.
                 let creep = self.active_creeps.get_mut(&entity_index).unwrap();
                 creep.x = x;
                 creep.y = y;
                 creep.life_state = life_state;
+                creep.npc_state = npc_state;
 
                 if life_state == LIFE_DEAD {
                     debug!(
                         "[creep_tracker] UPDATE entity={} life_state=DEAD -- suppressing snapshots but keeping in active_creeps",
                         entity_index
+                    );
+                } else if matches!(npc_state, NPC_STATE_DYING_CITADEL | NPC_STATE_DEAD_CITADEL) {
+                    debug!(
+                        "[creep_tracker] UPDATE entity={} npc_state={} (death state) while life_state=ALIVE -- will be suppressed at snapshot",
+                        entity_index, npc_state
                     );
                 }
             }
@@ -327,14 +340,23 @@ impl CreepTracker {
         let active_indices: Vec<i32> = self.active_creeps.keys().copied().collect();
 
         for entity_index in &active_indices {
-            let (lane, team, x, y, wave_id, life_state, is_cage) = {
+            let (lane, team, x, y, wave_id, life_state, npc_state, is_cage) = {
                 let c = &self.active_creeps[entity_index];
-                (c.lane, c.team, c.x, c.y, c.wave_id.clone(), c.life_state, c.is_cage)
+                (c.lane, c.team, c.x, c.y, c.wave_id.clone(), c.life_state, c.npc_state, c.is_cage)
             };
 
-            // Suppress snapshot when creep is dead. Emit None so the timeline slot is filled
-            // but the frontend does not render a ghost creep at the wrong location.
-            let entry = if life_state == LIFE_DEAD {
+            // Emit a snapshot only when the creep is confirmed active in lane (whitelist).
+            // Whitelisted npc_states:
+            // - NPC_STATE_IDLE (1): active in lane, no threat
+            // - NPC_STATE_ALERT (2): threat detected, not yet in combat
+            // - NPC_STATE_COMBAT (3): fighting in lane
+            // - NPC_STATE_INERT (6): stunned/frozen mid-lane, or cage entity on zipline
+            // All other states (DYING_CITADEL, DEAD_CITADEL, DEAD, INIT, INVALID, etc.) are
+            // suppressed. Unknown future states are also suppressed -- safe default.
+            // life_state must be LIFE_ALIVE regardless of npc_state (guards INERT+DEAD/DYING).
+            let is_active = life_state == LIFE_ALIVE
+                && matches!(npc_state, NPC_STATE_IDLE | NPC_STATE_ALERT | NPC_STATE_COMBAT | NPC_STATE_INERT);
+            let entry = if !is_active {
                 None
             } else {
                 let nearby_players = Self::compute_nearby_players(x, y, player_positions);

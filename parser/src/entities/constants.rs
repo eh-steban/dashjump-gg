@@ -23,33 +23,33 @@ pub const CNPC_NECROSKELE_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_NecroSkele");
 pub const CCITADEL_GRAVESTONE_BLOCKER_ENTITY: u64 =
     fxhash::hash_bytes(b"CCitadel_GraveStone_Blocker");
 
-// NPC entities
+// Lane creeps
 pub const CNPC_TROOPER_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_Trooper");
+
+// Drop entities
+/// Soul orb spawned on unit death. Players shoot it to claim souls; enemies can deny it.
+pub const CITEMXP_ENTITY: u64 = fxhash::hash_bytes(b"CItemXP");
+
+// Objective entities
+
 /// Lane objective -- priority 1 / first target (Guardian). The first structure creeps push
 /// toward in each lane. Destroying it opens the path to the Walker.
 pub const CNPC_TROOPERBOSS_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_TrooperBoss");
-pub const CNPC_TROOPERNEUTRAL_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_TrooperNeutral");
-pub const CNPC_MIDBOSS_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_MidBoss");
-
-// Objective entities
-pub const CITEMXP_ENTITY: u64 = fxhash::hash_bytes(b"CItemXP");
-
+/// Lane objective -- priority 2 (Walker). Second priority target in lane after the Guardian.
+pub const CNPC_BOSS_TIER2_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_Boss_Tier2");
+/// Lane objective -- priority 3 (Base Guardian). Third priority target after the Walker.
+pub const CNPC_BARRACKBOSS_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_BarrackBoss");
 /// Lane objective -- priority 4 (Shrine). Destroyable building on each lane route.
 /// Must be destroyed before reaching the Base Guardian.
 pub const CCITADEL_DESTROYABLE_BUILDING_ENTITY: u64 =
     fxhash::hash_bytes(b"CCitadel_Destroyable_Building");
-
-/// Lane objective -- priority 2 (Walker). Second priority target in lane after the Guardian.
-pub const CNPC_BOSS_TIER2_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_Boss_Tier2");
-
-/// Lane objective -- priority 3 (Base Guardian). Third priority target after the Walker.
-pub const CNPC_BARRACKBOSS_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_BarrackBoss");
-
 /// Lane objective -- priority 5 / final (Patron). The main base objective; destroying it ends
 /// the match. Last priority in the standard lane-push sequence.
 pub const CNPC_BOSS_TIER3_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_Boss_Tier3");
+pub const CNPC_MIDBOSS_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_MidBoss");
 
 // Neutral entities
+pub const CNPC_TROOPERNEUTRAL_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_TrooperNeutral");
 pub const CNPC_NEUTRAL_SINNERSSACRIFICE_ENTITY: u64 =
     fxhash::hash_bytes(b"CNPC_Neutral_SinnersSacrifice");
 
@@ -76,11 +76,6 @@ pub const ASSIGNED_LANE_KEY: u64 = fkey_from_path(&["m_nAssignedLane"]);
 pub const LANE_SWAP_LOCKED_KEY: u64 = fkey_from_path(&["m_bLaneSwapLocked"]);
 pub const HERO_ID_KEY: u64 = fkey_from_path(&["m_PlayerDataGlobal", "m_nHeroID"]);
 pub const LOBBY_PLAYER_SLOT_KEY: u64 = fkey_from_path(&["m_unLobbyPlayerSlot"]);
-
-// FIXME: This might be deprecated. When looking at haste inspector, ZipLineLaneColor
-// doesn't show up until fairly late in the game, it's hit or miss when it shows up,
-// and it seems to only show 0. I'm unsure how that's used or how lane color is set.
-pub const ZIPLINE_LANE_COLOR_KEY: u64 = fkey_from_path(&["m_eZipLineLaneColor"]);
 
 // NPC fields
 pub const NPC_LANE_KEY: u64 = fkey_from_path(&["m_iLane"]);
@@ -113,6 +108,7 @@ pub const NPC_STATE_DEAD_CITADEL: i32 = 12;
 // Life state values for m_lifeState (u8)
 pub const LIFE_STATE_KEY: u64 = fkey_from_path(&["m_lifeState"]);
 pub const LIFE_ALIVE: u8 = 0;
+pub const LIFE_DYING: u8 = 1;
 pub const LIFE_DEAD: u8 = 2;
 
 // Movement type field -- CBaseEntity.m_MoveType (MoveType_t, underlying uint8)
