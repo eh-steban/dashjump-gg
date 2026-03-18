@@ -76,18 +76,15 @@ const MatchAnalysis = () => {
   const playersData = parsedMatchData.players_data;
   // NOTE: Contains dmg/position data per player
   const perPlayerData = parsedMatchData.per_player_data;
-  // FIXME: our frontend shouldn't care what the match duration is and
-  // backend/app/services/players_data_service also has this calculation.
-  // This should be owned by the parser.
-  const matchDuration =
-    parsedMatchData.total_match_time_s - parsedMatchData.match_start_time_s;
+  const matchDuration = parsedMatchData.total_match_time_s;
+  const matchStartTime = parsedMatchData.match_start_time_s;
   const [heroData, setHeroData] = useState<Hero[]>([
     { id: 0, name: 'Default', images: {} },
   ]);
   const isMounted = useRef(false);
 
   const [currentTick, setCurrentTick] = useState<number>(0);
-  const matchTime = formatSecondstoMMSS(currentTick);
+  const matchTime = formatSecondstoMMSS(currentTick + matchStartTime);
 
   // Timeline repeat functionality (for hold-to-scrub)
   const repeatRef = useRef<NodeJS.Timeout | null>(null);
@@ -289,6 +286,7 @@ const MatchAnalysis = () => {
             currentTick={currentTick}
             setCurrentTick={setCurrentTick}
             total_match_time_s={matchDuration}
+            match_start_time_s={matchStartTime}
             startRepeat={startRepeat}
             stopRepeat={stopRepeat}
           />

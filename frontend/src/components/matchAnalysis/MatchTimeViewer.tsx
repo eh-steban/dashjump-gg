@@ -5,6 +5,7 @@ interface MatchTimeViewerProps {
   currentTick: number;
   setCurrentTick: (time: number | ((t: number) => number)) => void;
   total_match_time_s: number;
+  match_start_time_s: number;
   startRepeat: (direction: 'back' | 'forward') => void;
   stopRepeat: () => void;
 }
@@ -13,11 +14,14 @@ const MatchTimeViewer: React.FC<MatchTimeViewerProps> = ({
   currentTick,
   setCurrentTick,
   total_match_time_s,
+  match_start_time_s,
   startRepeat,
   stopRepeat,
 }) => {
-  const currentTime = formatSecondstoMMSS(currentTick);
-  const totalTime = formatSecondstoMMSS(total_match_time_s);
+  // Display times offset by match_start_time_s so the clock matches the
+  // in-game timer (e.g. positions[0] shows as "0:38" not "0:00").
+  const currentTime = formatSecondstoMMSS(currentTick + match_start_time_s);
+  const totalTime = formatSecondstoMMSS(total_match_time_s + match_start_time_s);
 
   return (
     <div className='flex w-full justify-center'>

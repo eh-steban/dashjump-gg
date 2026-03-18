@@ -95,6 +95,8 @@ class LanePressureCalculator:
             timeline_length = LanePressureCalculator._wave_timeline_length(
                 wave_id, lane_creep_data
             )
+            if timeline_length == 0:
+                continue
 
             snapshots: list[Optional[LanePressureSnapshot]] = []
 
@@ -185,7 +187,10 @@ class LanePressureCalculator:
             for snap in timeline:
                 if snap is not None and snap.wave_id == wave_id:
                     return len(timeline)
-        logger.error("No live snapshots found for wave %s -- wave_meta references unknown wave", wave_id)
+        logger.warning(
+            "No live snapshots found for wave %s -- wave_meta references unknown wave (orphan wave; skipping)",
+            wave_id,
+        )
         return 0
 
     @staticmethod
