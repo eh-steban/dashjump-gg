@@ -76,7 +76,6 @@ export interface PlayerData {
   name: string;
   steam_id_32: number;
   team: number;
-  zipline_lane_color: number;
   hero: Hero; // Enriched hero data (added after lookup, may be fallback if hero_id not found)
 }
 

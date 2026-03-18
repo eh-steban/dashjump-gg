@@ -11,7 +11,6 @@ pub struct Player {
     pub lobby_player_slot: u32,
     pub team: u32,
     pub lane: i8,
-    pub zipline_lane_color: u32,
 }
 
 /// Per-tick player/entity position

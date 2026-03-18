@@ -98,10 +98,6 @@ impl MyVisitor {
                     .filter(|&v| v != 0)
                     .unwrap_or(99);
 
-                // TODO: Lane color fix - need to capture zipline_lane_color at lock time
-                // Currently captured at player discovery which may be incorrect
-                // See ZIPLINE_LANE_COLOR_KEY constant in entities/constants.rs
-
                 break;
             }
         }
@@ -215,9 +211,6 @@ impl MyVisitor {
                             .get_value::<i8>(&ASSIGNED_LANE_KEY)
                             .filter(|&v| v != 0)
                             .unwrap_or(99),
-                        zipline_lane_color: owner_entity
-                            .get_value(&ZIPLINE_LANE_COLOR_KEY)
-                            .unwrap_or(999999),
                     });
 
                     lobby_player_slot

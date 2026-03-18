@@ -15,7 +15,6 @@ class PlayerInfo(SQLModel):
     team: int
     hero_id: int
     # lane: int
-    # zipline_lane_color: int
 
 
 # TODO: Might not be needed anymore...
@@ -33,7 +32,6 @@ class PlayerData(SQLModel):
     lobby_player_slot: Optional[int] = None
     team: int
     lane: int
-    zipline_lane_color: Optional[int] = None
     # player_info: PlayerInfo
 
 
