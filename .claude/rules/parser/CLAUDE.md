@@ -125,6 +125,27 @@ Before implementing new message listeners or entity subscriptions, check:
 3. Parser compresses and returns positional and damage data
 4. Backend receives and transforms for storage
 
+## Parser API Contract
+
+`POST http://localhost:9000/parse` -- expects:
+```json
+{ "demo_url": "<base64url-encoded Valve CDN URL>" }
+```
+
+The parser does NOT accept a local file path or match ID directly. It decodes the URL, downloads the `.dem.bz2` from Valve's CDN (caches at `src/compressed-replays/`), decompresses (caches at `src/replays/`), and parses.
+
+**To test against real data locally**, go through the backend -- it handles CDN URL fetching and encoding:
+```
+GET http://localhost:8000/match/analysis/{match_id}
+```
+
+To call the parser directly, base64url-encode the CDN URL yourself:
+```bash
+ENCODED=$(echo -n "http://replay.valve.net/..../match.dem.bz2" | base64 -w0)
+curl -X POST http://localhost:9000/parse -H "Content-Type: application/json" \
+  -d "{\"demo_url\": \"$ENCODED\"}"
+```
+
 ## Output Data
 
 Parser produces (compressed before sending to backend):
