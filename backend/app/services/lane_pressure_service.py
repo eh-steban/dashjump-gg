@@ -39,6 +39,9 @@ _BOSS_PRIORITY: dict[int, int] = {
 # team 2's enemy is team 3, and team 3's enemy is team 2
 _ENEMY_TEAM: dict[int, int] = {2: 3, 3: 2}
 
+STALE_POSITION_THRESHOLD_S: int = 60
+STALE_POSITION_EPSILON: float = 1.0  # world units
+
 
 def _euclidean(x1: float, y1: float, x2: float, y2: float) -> float:
     dx = x1 - x2
@@ -79,6 +82,7 @@ class LanePressureCalculator:
         objective_map = LanePressureCalculator._build_objective_map(boss_data)
 
         pressure_timeline: dict[str, list[Optional[LanePressureSnapshot]]] = {}
+        stale_stats: dict = {"total": 0, "excluded": 0}
 
         for wave_id, wave_meta in lane_creep_data.wave_meta.items():
             lane = wave_meta.lane
@@ -102,7 +106,7 @@ class LanePressureCalculator:
 
             for second in range(timeline_length):
                 alive_creeps = LanePressureCalculator._alive_creeps_at(
-                    wave_id, second, lane_creep_data
+                    wave_id, second, lane_creep_data, stale_stats
                 )
 
                 if not alive_creeps:
@@ -145,6 +149,16 @@ class LanePressureCalculator:
                 )
 
             pressure_timeline[wave_id] = snapshots
+
+        if stale_stats["total"] > 0:
+            pct = 100.0 * stale_stats["excluded"] / stale_stats["total"]
+            logger.info(
+                "Staleness filter: excluded %d / %d creep-ticks (%.1f%%) using %ds threshold",
+                stale_stats["excluded"],
+                stale_stats["total"],
+                pct,
+                STALE_POSITION_THRESHOLD_S,
+            )
 
         logger.debug(
             "Calculated pressure for %d wave(s)",
@@ -194,10 +208,36 @@ class LanePressureCalculator:
         return 0
 
     @staticmethod
+    def _is_position_stale(timeline: list, second: int) -> bool:
+        """Return True if this creep's position has not changed meaningfully in the last STALE_POSITION_THRESHOLD_S seconds.
+
+        Ghost creeps (entities with stale Valve demo state) have exactly the same
+        float position values for minutes. Real creeps -- even briefly stunned --
+        will move within a few seconds. A 10s threshold safely excludes ghosts
+        while keeping stunned-but-alive creeps (max stun duration ~1-3s in Deadlock).
+        """
+        if second < STALE_POSITION_THRESHOLD_S:
+            return False
+        snap = timeline[second]
+        if snap is None:
+            return False
+        ref_x, ref_y = snap.x, snap.y
+        for past_sec in range(second - 1, second - STALE_POSITION_THRESHOLD_S, -1):
+            past_snap = timeline[past_sec]
+            if past_snap is None:
+                return False  # gap: not alive this far back, can't be stale
+            dx = ref_x - past_snap.x
+            dy = ref_y - past_snap.y
+            if dx * dx + dy * dy > STALE_POSITION_EPSILON ** 2:
+                return False  # moved
+        return True
+
+    @staticmethod
     def _alive_creeps_at(
         wave_id: str,
         second: int,
         lane_creep_data: LaneCreepData,
+        stale_stats: Optional[dict] = None,
     ) -> list[CreepSnapshot]:
         """Return all alive creep snapshots for a wave at a given second."""
         alive: list[CreepSnapshot] = []
@@ -205,7 +245,13 @@ class LanePressureCalculator:
             if second >= len(timeline):
                 continue
             snap = timeline[second]
-            if snap is not None and snap.wave_id == wave_id:
+            if snap is not None and snap.wave_id == wave_id and not snap.is_cage:
+                if stale_stats is not None:
+                    stale_stats["total"] += 1
+                if LanePressureCalculator._is_position_stale(timeline, second):
+                    if stale_stats is not None:
+                        stale_stats["excluded"] += 1
+                    continue
                 alive.append(snap)
         return alive
 

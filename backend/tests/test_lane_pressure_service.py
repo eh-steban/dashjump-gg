@@ -216,8 +216,8 @@ class TestObjectiveChaining:
         assert snap is not None
 
         # The pressure was computed against the walker (y=7000), not the dead guardian (y=4000)
-        # Verify that the distance used was to the walker
-        lane_length = _euclidean(0.0, -5000.0, 0.0, 4000.0)  # own guardian to enemy guardian
+        # lane_length spans own frontline to the current live target (walker), not the dead guardian
+        lane_length = _euclidean(0.0, -5000.0, 0.0, 7000.0)  # own guardian to enemy walker
         dist_to_walker = _euclidean(0.0, 5500.0, 0.0, 7000.0)
         expected_raw = max(0.0, min(1.0, 1.0 - dist_to_walker / lane_length))
         expected_pressure = expected_raw * 0.25  # 1 creep
