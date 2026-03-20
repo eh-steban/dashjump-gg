@@ -16,3 +16,6 @@
 # See .claude/projects/README.md for details
 
 parser/.cargo/config.toml
+
+docker-compose.override.yaml
+.env

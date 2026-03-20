@@ -1,0 +1,262 @@
+#!/usr/bin/env bash
+# scripts/wt -- multi-agent worktree manager for dashjump-gg
+# Usage: scripts/wt <command> [args]
+#
+# Commands:
+#   create <name> [branch] [--full]   create worktree + start stack (default: no parser)
+#   list                              show all worktrees with ports and Docker status
+#   start <name> [--full]             (re)start a stopped stack; --full includes parser
+#   stop <name>                       docker compose down (keeps postgres-data volume)
+#   sync <name>                       rebase worktree onto main + run alembic upgrade head
+#   remove <name>                     tear down stack, remove worktree + branch
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
+PARENT_DIR="$(dirname "$REPO_ROOT")"
+REPO_NAME="$(basename "$REPO_ROOT")"   # dashjump-gg
+
+BASE_FRONTEND=3000
+BASE_BACKEND=8000
+BASE_PARSER=9000
+BASE_DB=5432
+PORT_STEP=10
+
+# Run docker compose using the main repo's compose file but the worktree's .env and
+# override. This ensures port variables from the worktree's .env are substituted into
+# the (parameterized) docker-compose.yaml, and paths resolve relative to the worktree.
+#
+# Why --file is required: --project-directory makes Compose look for docker-compose.yaml
+# inside the worktree, which is checked out from main and may have stale/hardcoded ports.
+# Explicitly pointing --file at the main repo's file ensures the current version is used.
+dc() {
+  local dir="$1"; shift
+  docker compose \
+    --file "${REPO_ROOT}/docker-compose.yaml" \
+    --file "${dir}/docker-compose.override.yaml" \
+    --project-directory "$dir" \
+    --env-file "${dir}/.env" \
+    "$@"
+}
+
+# Returns the lowest available slot number by scanning sibling .env files
+next_slot() {
+  local slot=1
+  while true; do
+    local target_port=$(( BASE_FRONTEND + slot * PORT_STEP ))
+    local taken=false
+    for env_file in "${PARENT_DIR}/${REPO_NAME}"-*/.env; do
+      [[ -f "$env_file" ]] || continue
+      local pf
+      pf=$(grep "^PORT_FRONTEND=" "$env_file" 2>/dev/null | cut -d= -f2)
+      [[ "$pf" == "$target_port" ]] && { taken=true; break; }
+    done
+    $taken || break
+    (( slot++ ))
+  done
+  echo "$slot"
+}
+
+cmd_create() {
+  local name="${1:?Usage: wt create <name> [branch] [--full]}"
+  local branch="" full_flag=""
+
+  shift
+  for arg in "$@"; do
+    case "$arg" in
+      --full) full_flag="--full" ;;
+      *)      branch="$arg" ;;
+    esac
+  done
+  branch="${branch:-$name}"
+
+  local dir="${PARENT_DIR}/${REPO_NAME}-${name}"
+  [[ -d "$dir" ]] && { echo "Error: $dir already exists"; exit 1; }
+
+  local slot
+  slot=$(next_slot)
+
+  git -C "$REPO_ROOT" worktree add "$dir" -b "$branch" main
+
+  # Auto-generate secrets -- fresh per worktree so they don't share credentials
+  local fernet_key jwt_key
+  fernet_key=$(python3 -c "import os, base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())")
+  jwt_key=$(python3 -c "import os, base64; print(base64.urlsafe_b64encode(os.urandom(64)).decode())")
+
+  # Write root .env (Docker Compose port/project vars)
+  {
+    grep -vE "^(COMPOSE_PROJECT_NAME|PORT_)|(^# Worktree isolation)|(^# For manual)|(^# (COMPOSE|PORT_))" \
+      "${REPO_ROOT}/.env.example" 2>/dev/null || true
+    echo ""
+    echo "# Worktree isolation (written by scripts/wt create)"
+    echo "COMPOSE_PROJECT_NAME=${REPO_NAME}-${name}"
+    echo "PORT_FRONTEND=$(( BASE_FRONTEND + slot * PORT_STEP ))"
+    echo "PORT_BACKEND=$(( BASE_BACKEND  + slot * PORT_STEP ))"
+    echo "PORT_PARSER=$(( BASE_PARSER   + slot * PORT_STEP ))"
+    echo "PORT_DB=$(( BASE_DB           + slot * PORT_STEP ))"
+    echo "MAIN_REPLAYS_DIR=${REPO_ROOT}/parser/src/replays"
+  } > "${dir}/.env"
+
+  # Carry over API keys from the main backend/.env if present; fall back to placeholders
+  local main_env="${REPO_ROOT}/backend/.env"
+  local deadlock_api_key steam_api_key
+  deadlock_api_key=$(grep "^DEADLOCK_API_KEY=" "$main_env" 2>/dev/null | cut -d= -f2 || echo "changeme")
+  steam_api_key=$(grep "^STEAM_WEB_API_KEY=" "$main_env" 2>/dev/null | cut -d= -f2 || echo "changeme")
+
+  # Write backend/.env (pydantic reads this from /backend inside the container)
+  {
+    grep -vE "^(FERNET_SECRET_KEY|JWT_SECRET_KEY|DEADLOCK_API_KEY|STEAM_WEB_API_KEY)=" \
+      "${REPO_ROOT}/backend/.env.example"
+    echo "FERNET_SECRET_KEY=${fernet_key}"
+    echo "JWT_SECRET_KEY=${jwt_key}"
+    echo "DEADLOCK_API_KEY=${deadlock_api_key}"
+    echo "STEAM_WEB_API_KEY=${steam_api_key}"
+  } > "${dir}/backend/.env"
+
+  cp "${REPO_ROOT}/docker-compose.override.yaml.example" \
+     "${dir}/docker-compose.override.yaml"
+
+  echo "Created: $dir (slot $slot)"
+  echo "  Frontend: localhost:$(( BASE_FRONTEND + slot * PORT_STEP ))"
+  echo "  Backend:  localhost:$(( BASE_BACKEND  + slot * PORT_STEP ))"
+  echo ""
+
+  cmd_start "$name" $full_flag
+}
+
+cmd_list() {
+  printf "%-28s  %-4s  %-8s  %-7s  %-6s  %-5s  %s\n" \
+    WORKTREE SLOT FRONTEND BACKEND PARSER DB STATUS
+  echo "---"
+  while IFS= read -r dir; do
+    if [[ "$dir" == "$REPO_ROOT" ]]; then
+      printf "%-28s  %-4s  %-8s  %-7s  %-6s  %-5s  %s\n" \
+        "(main)" "--" "3000" "8000" "9000" "5432" "(main stack)"
+      continue
+    fi
+    local name="${dir#${PARENT_DIR}/${REPO_NAME}-}"
+    local env_file="${dir}/.env"
+    if [[ ! -f "$env_file" ]]; then
+      printf "%-28s  %s\n" "$name" "no .env (pre-dates wt script)"
+      continue
+    fi
+    local pf pb pp pd proj
+    pf=$(grep "^PORT_FRONTEND="          "$env_file" | cut -d= -f2)
+    pb=$(grep "^PORT_BACKEND="           "$env_file" | cut -d= -f2)
+    pp=$(grep "^PORT_PARSER="            "$env_file" | cut -d= -f2)
+    pd=$(grep "^PORT_DB="               "$env_file" | cut -d= -f2)
+    proj=$(grep "^COMPOSE_PROJECT_NAME=" "$env_file" | cut -d= -f2)
+    local slot=$(( (pf - BASE_FRONTEND) / PORT_STEP ))
+    local running
+    running=$(docker ps --filter "label=com.docker.compose.project=${proj}" \
+                        --format '{{.Names}}' 2>/dev/null | wc -l)
+    local status="down"
+    (( running > 0 )) && status="up (${running} containers)"
+    printf "%-28s  %-4s  %-8s  %-7s  %-6s  %-5s  %s\n" \
+      "$name" "$slot" "$pf" "$pb" "$pp" "$pd" "$status"
+  done < <(git -C "$REPO_ROOT" worktree list --porcelain \
+    | grep "^worktree " | awk '{print $2}')
+}
+
+cmd_start() {
+  local name="${1:?Usage: wt start <name> [--full]}"
+  local full=false
+  [[ "${2:-}" == "--full" ]] && full=true
+
+  local dir="${PARENT_DIR}/${REPO_NAME}-${name}"
+  [[ -d "$dir" ]] || { echo "Error: worktree not found: $dir"; exit 1; }
+
+  # Always start DB first and wait for it -- migrations and backend both need it ready.
+  dc "$dir" up -d --no-deps dashjump-db
+  echo -n "Waiting for DB"
+  until dc "$dir" exec -T dashjump-db pg_isready -U deadlock -q 2>/dev/null; do
+    echo -n "."
+    sleep 1
+  done
+  echo " ready"
+
+  # Run migrations on a fresh DB before starting the backend
+  local rows
+  rows=$(dc "$dir" exec -T dashjump-db \
+    psql -U deadlock -d deadlock_db -qt \
+    -c "SELECT COUNT(*) FROM alembic_version;" 2>/dev/null | tr -d ' \n' || echo "0")
+  if [[ "$rows" == "0" ]]; then
+    echo "Fresh DB -- running migrations..."
+    dc "$dir" run --rm dashjump-backend alembic upgrade head
+  fi
+
+  if $full; then
+    dc "$dir" up -d
+  else
+    # --no-deps prevents backend's depends_on: dashjump-parser from dragging the parser in.
+    dc "$dir" up -d --no-deps dashjump-backend dashjump-frontend
+  fi
+}
+
+cmd_stop() {
+  local name="${1:?Usage: wt stop <name>}"
+  local dir="${PARENT_DIR}/${REPO_NAME}-${name}"
+  dc "$dir" down
+}
+
+cmd_sync() {
+  local name="${1:?Usage: wt sync <name>}"
+  local dir="${PARENT_DIR}/${REPO_NAME}-${name}"
+  echo "Rebasing ${name} onto main..."
+  git -C "$dir" rebase main
+  echo "Applying migrations..."
+  dc "$dir" exec -T dashjump-backend alembic upgrade head
+  echo "Sync complete."
+}
+
+cmd_remove() {
+  local name="${1:?Usage: wt remove <name>}"
+  local dir="${PARENT_DIR}/${REPO_NAME}-${name}"
+
+  if [[ "$dir" -ef "$REPO_ROOT" ]]; then
+    echo "Error: refusing to remove the main repository"
+    exit 1
+  fi
+
+  local branch
+  branch=$(git -C "$REPO_ROOT" worktree list --porcelain \
+    | grep -A3 "^worktree ${dir}$" \
+    | grep "^branch " | sed 's|branch refs/heads/||') || branch=""
+
+  dc "$dir" down --volumes 2>/dev/null || true
+  # Docker bind mounts (./backend, ./parser) create root-owned files (__pycache__, Rust
+  # target artifacts). sudo rm bypasses ownership entirely; worktree prune cleans git metadata.
+  sudo rm -rf "$dir"
+  git -C "$REPO_ROOT" worktree prune
+  if [[ -n "$branch" ]]; then
+    git -C "$REPO_ROOT" branch -d "$branch" 2>/dev/null \
+      || echo "Note: branch '$branch' has unpushed commits -- delete manually: git branch -D $branch"
+  fi
+  echo "Removed: $name"
+}
+
+# Dispatch
+CMD="${1:-}"
+shift || true
+
+case "$CMD" in
+  create) cmd_create "$@" ;;
+  list)   cmd_list ;;
+  start)  cmd_start "$@" ;;
+  stop)   cmd_stop "$@" ;;
+  sync)   cmd_sync "$@" ;;
+  remove) cmd_remove "$@" ;;
+  *)
+    echo "Usage: scripts/wt <command> [args]"
+    echo ""
+    echo "Commands:"
+    echo "  create <name> [branch] [--full]  create worktree + start stack"
+    echo "  list                             show all worktrees with ports and status"
+    echo "  start <name> [--full]            (re)start a stopped stack"
+    echo "  stop <name>                      docker compose down (keeps DB volume)"
+    echo "  sync <name>                      rebase onto main + run migrations"
+    echo "  remove <name>                    tear down stack, remove worktree + branch"
+    exit 1
+    ;;
+esac

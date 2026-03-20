@@ -21,4 +21,4 @@ COPY --chown=lifted:lifted . /parser/
 RUN rustc --version
 RUN protoc --version
 
-CMD ["cargo", "watch", "-i", "src/compressed-replays/", "-i", "src/replays/", "-x", "run"]
+CMD ["cargo", "watch", "-i", "src/compressed-replays/**", "-i", "src/replays/**", "-x", "run"]

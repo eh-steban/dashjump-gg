@@ -28,6 +28,5 @@ class Settings(BaseSettings):
 
     STEAM_WEB_API_KEY: str = "key"
     STEAM_HASH_SALT: str = "salt"
-    LIFTED_STEAM_ID: str = "steamId"
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)

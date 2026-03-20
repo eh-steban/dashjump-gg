@@ -1,0 +1,16 @@
+# Worktree isolation override -- committed template, NOT auto-merged by Compose.
+# Populated automatically by `scripts/wt create`. For manual setup, copy this file
+# to docker-compose.override.yaml and write PORT_* + COMPOSE_PROJECT_NAME to .env.
+#
+# Port isolation is handled by PORT_* variables in .env flowing through docker-compose.yaml.
+# This override only needs to wire the shared Rust cargo cache.
+
+services:
+  dashjump-parser:
+    volumes:
+      - cargo-cache-shared:/home/lifted/.cargo
+      - ${MAIN_REPLAYS_DIR}:/parser/src/replays
+
+volumes:
+  cargo-cache-shared:
+    name: dashjump-gg-cargo-cache

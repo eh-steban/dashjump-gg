@@ -10,12 +10,12 @@ services:
       - "--host"
       - "0.0.0.0"
     ports:
-      - "3000:3000"
+      - "${PORT_FRONTEND:-3000}:3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      - VITE_BACKEND_DOMAIN=localhost:8000
+      - VITE_BACKEND_DOMAIN=localhost:${PORT_BACKEND:-8000}
     depends_on:
       - dashjump-backend
 
@@ -23,7 +23,7 @@ services:
     build:
       context: ./backend
     ports:
-      - "8000:8000"
+      - "${PORT_BACKEND:-8000}:8000"
     volumes:
       - ./backend:/backend
     environment:
@@ -37,7 +37,7 @@ services:
     build:
       context: ./parser
     ports:
-      - "9000:9000"
+      - "${PORT_PARSER:-9000}:9000"
     volumes:
       - ./parser:/parser
       - cargo-cache:/home/lifted/.cargo
@@ -48,7 +48,7 @@ services:
   dashjump-db:
     image: postgres:16-alpine
     ports:
-      - "5432:5432"
+      - "${PORT_DB:-5432}:5432"
     environment:
       POSTGRES_USER: deadlock
       POSTGRES_PASSWORD: deadlockpass

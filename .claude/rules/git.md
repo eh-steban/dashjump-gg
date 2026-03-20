@@ -87,42 +87,105 @@ Breaking changes MUST be indicated in one of two ways:
 
 ## Worktree Workflow
 
-Use a git worktree when a change needs to land on `main` independently of in-progress feature work
--- e.g. a dependency migration, a chore, or a hotfix that other branches will need to consume.
+Use a git worktree when running a parallel Claude Code agent on a separate branch -- for parallel feature development, hotfixes, or dependency migrations that need to land independently.
 
-### Setup
+### Creating a worktree
 
 ```bash
-# Branch off main into a sibling directory
-git worktree add ../dashjump-gg-[short-name] -b [branch-name] main
+# Creates ../dashjump-gg-<name>/ with isolated ports and a full stack
+scripts/wt create <short-name> [branch-name]
 
-# Work in the new worktree (open a new Claude Code instance or cd into it)
-cd ../dashjump-gg-[short-name]
+# If branch-name is omitted, the short-name is used as the branch name
+scripts/wt create souls feature/souls-tracking
 ```
 
-Use a sibling directory (not a subdirectory of the repo). Docker Compose volume mounts and build
-caches use relative paths -- a sibling keeps them predictable and lets each worktree run the full
-stack independently if needed.
+Run from the repo root. The worktree branches from `main`, so each agent starts from a clean base. The script allocates ports, writes `.env`, copies the docker-compose override, and starts the stack. Then open a new terminal in the new directory and run `claude`.
 
-### Merge and rebase
-
-After the worktree branch is committed and merged to `main`:
+### Viewing all worktrees
 
 ```bash
-# Remove the worktree
-git worktree remove ../dashjump-gg-[short-name]
-git branch -d [branch-name]
+scripts/wt list
+# Shows: name, slot, ports (frontend/backend/parser/db), and Docker up/down status
+```
 
-# Rebase any dependent feature branches onto updated main
-cd /home/lifted/Code/dashjump-gg
-git rebase main
+### Starting the stack
+
+```bash
+# Default: starts DB + backend + frontend only (~10s). No parser -- avoids 3+ min Rust compile.
+scripts/wt start <name>
+
+# Full stack including parser (needed for replay parsing workflows):
+scripts/wt start <name> --full
+
+# Apply migrations on first start:
+docker compose --project-directory ../dashjump-gg-<name> exec dashjump-backend alembic upgrade head
+```
+
+### Running tests
+
+After `scripts/wt start <name>`, the DB and backend are hot. Run tests directly -- no need for `docker exec`:
+
+```bash
+# Backend tests -- run from the worktree directory
+cd ../dashjump-gg-<name>
+DATABASE_URL=postgresql+psycopg://deadlock:deadlockpass@localhost:<PORT_DB>/deadlock_db pytest backend/tests/
+
+# Browser / curl testing
+curl http://localhost:<PORT_BACKEND>/health
+# Open browser: http://localhost:<PORT_FRONTEND>
+
+# Parser unit tests (no running container needed)
+cd ../dashjump-gg-<name>/parser && cargo test
+```
+
+PORT_DB and PORT_BACKEND values are in `scripts/wt list` or in the worktree's `.env`.
+
+### Stopping
+
+```bash
+scripts/wt stop <name>    # docker compose down (keeps postgres-data volume)
+```
+
+### Merge workflow
+
+When another worktree's branch is merged to `main`, bring your worktree up to date with one command:
+
+```bash
+scripts/wt sync <name>
+# Rebases the branch onto main, then runs alembic upgrade head against the worktree's DB.
+# Each worktree has its own isolated postgres -- migrations don't auto-propagate.
+```
+
+Standard flow: agent commits + pushes -> PR merged to main -> run `wt sync` on other active worktrees.
+
+### Port assignment
+
+The script assigns ports by lowest available slot (reuses freed slots):
+
+| Slot | Frontend | Backend | Parser | DB   |
+|------|----------|---------|--------|------|
+| 1    | 3010     | 8010    | 9010   | 5442 |
+| 2    | 3020     | 8020    | 9020   | 5452 |
+| N    | 3000+N*10 | 8000+N*10 | 9000+N*10 | 5432+N*10 |
+
+The Rust cargo cache (`dashjump-gg-cargo-cache` volume) is shared across all worktrees -- no repeated recompilation.
+
+### Removing a worktree
+
+```bash
+scripts/wt remove <name>
+# Runs docker compose down --volumes (removes namespaced postgres-data, not cargo cache)
+# Removes the git worktree directory
+# Deletes the branch (warns if unpushed commits)
 ```
 
 ### When to use it
 
 | Scenario | Worktree? |
 |----------|-----------|
-| Dependency migration that unblocks a feature branch | yes |
+| Parallel agent working on a separate feature | yes |
+| Comparing two feature variants (A/B testing approaches) | yes |
 | Hotfix needed on main while feature work is active | yes |
-| Normal feature work with no active conflicting branch | no |
+| Dependency migration that unblocks a feature branch | yes |
+| Normal feature work, no conflicting active branch | no |
 | Quick fix on the current branch | no |
