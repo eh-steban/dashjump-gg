@@ -34,6 +34,7 @@ struct ActiveCreep {
     life_state: u8,
     npc_state: i32,
     is_cage: bool,
+    health: i32,
 }
 
 /// Tracks individual lane creep (trooper) entities throughout the match.
@@ -138,6 +139,7 @@ impl CreepTracker {
             life_state,
             npc_state,
             is_cage,
+            health,
         };
 
         self.active_creeps.insert(entity_index, creep);
@@ -261,14 +263,15 @@ impl CreepTracker {
                 creep.life_state = life_state;
                 creep.npc_state = npc_state;
             } else {
-                // Normal update: keep tracking, update position, life_state, and npc_state in
-                // place. DEAD life_state or a death npc_state means snapshot emission is
-                // suppressed in build_creep_snapshot rather than evicting the creep entirely.
+                // Normal update: keep tracking, update position, life_state, npc_state, and
+                // health in place. DEAD life_state, health=0, or a death npc_state means snapshot
+                // emission is suppressed in build_creep_snapshot rather than evicting the creep.
                 let creep = self.active_creeps.get_mut(&entity_index).unwrap();
                 creep.x = x;
                 creep.y = y;
                 creep.life_state = life_state;
                 creep.npc_state = npc_state;
+                creep.health = health;
 
                 if life_state == LIFE_DEAD {
                     debug!(
@@ -340,9 +343,9 @@ impl CreepTracker {
         let active_indices: Vec<i32> = self.active_creeps.keys().copied().collect();
 
         for entity_index in &active_indices {
-            let (lane, team, x, y, wave_id, life_state, npc_state, is_cage) = {
+            let (lane, team, x, y, wave_id, life_state, npc_state, is_cage, health) = {
                 let c = &self.active_creeps[entity_index];
-                (c.lane, c.team, c.x, c.y, c.wave_id.clone(), c.life_state, c.npc_state, c.is_cage)
+                (c.lane, c.team, c.x, c.y, c.wave_id.clone(), c.life_state, c.npc_state, c.is_cage, c.health)
             };
 
             // Emit a snapshot only when the creep is confirmed active in lane (whitelist).
@@ -354,7 +357,12 @@ impl CreepTracker {
             // All other states (DYING_CITADEL, DEAD_CITADEL, DEAD, INIT, INVALID, etc.) are
             // suppressed. Unknown future states are also suppressed -- safe default.
             // life_state must be LIFE_ALIVE regardless of npc_state (guards INERT+DEAD/DYING).
+            // health > 0 guards against dead creeps that are stuck in NPC_STATE_INERT + LIFE_ALIVE
+            // during the recycling-to-base transition: m_iHealth is set to 0 in the same tick as
+            // the fatal blow, making it a reliable dead-vs-alive discriminator before m_lifeState
+            // updates to LIFE_DEAD (~30 seconds later when the entity slot is recycled).
             let is_active = life_state == LIFE_ALIVE
+                && health > 0
                 && matches!(npc_state, NPC_STATE_IDLE | NPC_STATE_ALERT | NPC_STATE_COMBAT | NPC_STATE_INERT);
             let entry = if !is_active {
                 None

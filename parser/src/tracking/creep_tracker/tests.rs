@@ -584,3 +584,33 @@ fn test_npc_state_inert_dead_suppresses_snapshot() {
         "snapshot at sec 61 should be None for INERT+DEAD (recycling creep must not render)"
     );
 }
+
+// -------------------------------------------------------------------------
+// Ghost creep leak: NPC_STATE_INERT + LIFE_ALIVE + health=0 must suppress snapshot.
+//
+// Root cause: dead creeps transitioning through the "recycling back to base"
+// state have LIFE_ALIVE + NPC_STATE_INERT for ~30 seconds before the entity
+// slot is recycled and m_lifeState finally updates. m_iHealth IS set to 0 in
+// the same tick as the fatal blow, so health > 0 is the reliable discriminator.
+// -------------------------------------------------------------------------
+#[test]
+fn test_inert_alive_health_zero_suppresses_snapshot() {
+    let mut tracker = make_tracker();
+    let no_players: Vec<(i32, f32, f32)> = vec![];
+
+    // Register a normal creep as ALIVE + IDLE
+    tracker.handle_creep_create(1, 1, 2, 500.0, 500.0, 70, NPC_STATE_IDLE, LIFE_ALIVE, NORMAL_HEALTH);
+    tracker.build_creep_snapshot(70, &no_players);
+    let timeline = tracker.creep_timelines.get(&1).expect("timeline should exist");
+    assert!(timeline[70].is_some(), "snapshot at sec 70 should be Some while alive");
+
+    // Simulate the ghost-creep state: INERT + ALIVE but health drops to 0 (fatal blow landed)
+    tracker.handle_creep_update(1, 1, 2, 500.0, 500.0, 71, NPC_STATE_INERT, LIFE_ALIVE, 0);
+
+    tracker.build_creep_snapshot(71, &no_players);
+    let timeline = tracker.creep_timelines.get(&1).expect("timeline should exist");
+    assert!(
+        timeline[71].is_none(),
+        "snapshot at sec 71 should be None for INERT+ALIVE+health=0 (dead creep recycling to base)"
+    );
+}
