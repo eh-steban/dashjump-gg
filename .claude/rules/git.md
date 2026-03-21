@@ -85,6 +85,54 @@ Breaking changes MUST be indicated in one of two ways:
 
 ---
 
+## Branch Names
+
+Branches MUST follow [Conventional Branch](https://conventional-branch.github.io/) format:
+
+```
+<type>/<description>
+```
+
+### Types
+
+| Type | When to Use |
+|------|-------------|
+| `feature/` | New feature work |
+| `fix/` | Bug fix |
+| `hotfix/` | Urgent production fix |
+| `release/` | Release preparation |
+| `chore/` | Tooling, deps, maintenance |
+
+### Rules
+
+- Description MUST be lowercase, using only `a-z`, `0-9`, and hyphens
+- No consecutive hyphens, no leading/trailing hyphens in the description
+- Include ticket number when applicable: `feature/issue-123-login-flow`
+- Dots are permitted only in `release/` branches for version numbers: `release/v1.2.0`
+
+### Examples
+
+```
+feature/player-lane-pressure
+fix/parse-timing
+hotfix/security-patch
+release/v1.2.0
+chore/upgrade-parser-deps
+feature/issue-42-souls-tracking
+```
+
+### `scripts/wt` integration
+
+`wt create <name>` defaults the branch to `feature/<name>`. Pass an explicit second arg for other types:
+
+```bash
+scripts/wt create fix-parse-timing fix/parse-timing        # fix/ branch
+scripts/wt create souls feature/souls-tracking             # explicit feature/
+scripts/wt create release-v2 release/v2.0.0               # release/ with version
+```
+
+---
+
 ## Worktree Workflow
 
 Use a git worktree when running a parallel Claude Code agent on a separate branch -- for parallel feature development, hotfixes, or dependency migrations that need to land independently.

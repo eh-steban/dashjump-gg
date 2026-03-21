@@ -3,7 +3,7 @@
 # Usage: scripts/wt <command> [args]
 #
 # Commands:
-#   create <name> [branch] [--full]   create worktree + start stack (default: no parser)
+#   create <name> [branch] [--full]   create worktree + start stack; branch defaults to feature/<name>
 #   list                              show all worktrees with ports and Docker status
 #   start <name> [--full]             (re)start a stopped stack; --full includes parser
 #   stop <name>                       docker compose down (keeps postgres-data volume)
@@ -40,6 +40,22 @@ dc() {
     "$@"
 }
 
+# Warn if branch name does not follow conventional-branch format.
+# Non-fatal: prints a warning but does not abort.
+validate_branch_name() {
+  local branch="$1"
+  # release/ branches may use dots for version numbers (e.g. release/v1.2.0)
+  # all others: lowercase, numbers, hyphens only
+  if [[ "$branch" =~ ^release/[a-z0-9][a-z0-9.-]*[a-z0-9]$ ]] \
+    || [[ "$branch" =~ ^(feature|feat|fix|bugfix|hotfix|chore)/[a-z0-9][a-z0-9-]*[a-z0-9]$ ]] \
+    || [[ "$branch" =~ ^(feature|feat|fix|bugfix|hotfix|chore)/[a-z0-9]$ ]]; then
+    return 0
+  fi
+  echo "Warning: '$branch' does not follow conventional-branch format."
+  echo "  Expected: <type>/<description>  (e.g. feature/my-work, fix/issue-42)"
+  echo "  Types: feature/, fix/, hotfix/, release/, chore/"
+}
+
 # Returns the lowest available slot number by scanning sibling .env files
 next_slot() {
   local slot=1
@@ -69,7 +85,8 @@ cmd_create() {
       *)      branch="$arg" ;;
     esac
   done
-  branch="${branch:-$name}"
+  branch="${branch:-feature/${name}}"
+  validate_branch_name "$branch"
 
   local dir="${PARENT_DIR}/${REPO_NAME}-${name}"
   [[ -d "$dir" ]] && { echo "Error: $dir already exists"; exit 1; }
@@ -251,7 +268,7 @@ case "$CMD" in
     echo "Usage: scripts/wt <command> [args]"
     echo ""
     echo "Commands:"
-    echo "  create <name> [branch] [--full]  create worktree + start stack"
+    echo "  create <name> [branch] [--full]  create worktree + start stack (branch defaults to feature/<name>)"
     echo "  list                             show all worktrees with ports and status"
     echo "  start <name> [--full]            (re)start a stopped stack"
     echo "  stop <name>                      docker compose down (keeps DB volume)"
