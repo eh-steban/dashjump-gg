@@ -122,13 +122,18 @@ cmd_create() {
   steam_api_key=$(grep "^STEAM_WEB_API_KEY=" "$main_env" 2>/dev/null | cut -d= -f2 || echo "changeme")
 
   # Write backend/.env (pydantic reads this from /backend inside the container)
+  local port_fe port_be
+  port_fe=$(( BASE_FRONTEND + slot * PORT_STEP ))
+  port_be=$(( BASE_BACKEND  + slot * PORT_STEP ))
   {
-    grep -vE "^(FERNET_SECRET_KEY|JWT_SECRET_KEY|DEADLOCK_API_KEY|STEAM_WEB_API_KEY)=" \
+    grep -vE "^(FERNET_SECRET_KEY|JWT_SECRET_KEY|DEADLOCK_API_KEY|STEAM_WEB_API_KEY|FRONTEND_BASE_URL|BACKEND_BASE_URL)=" \
       "${REPO_ROOT}/backend/.env.example"
     echo "FERNET_SECRET_KEY=${fernet_key}"
     echo "JWT_SECRET_KEY=${jwt_key}"
     echo "DEADLOCK_API_KEY=${deadlock_api_key}"
     echo "STEAM_WEB_API_KEY=${steam_api_key}"
+    echo "FRONTEND_BASE_URL=http://localhost:${port_fe}"
+    echo "BACKEND_BASE_URL=http://localhost:${port_be}"
   } > "${dir}/backend/.env"
 
   cp "${REPO_ROOT}/docker-compose.override.yaml.example" \
