@@ -45,6 +45,20 @@ class LoggerManager:
         return logging.getLogger(name)
 
 
+def fmt_duration(ms: float) -> str:
+    """Format a duration in milliseconds for log output.
+
+    Examples:
+        1846.3  -> '1846 ms (1.8s)'
+        90123.0 -> '90123 ms (1m 30s)'
+    """
+    if ms < 60_000:
+        return f"{ms:.0f} ms ({ms / 1000:.1f}s)"
+    minutes = int(ms // 60_000)
+    seconds = (ms % 60_000) / 1000
+    return f"{ms:.0f} ms ({minutes}m {seconds:.0f}s)"
+
+
 def get_logger(name: str) -> logging.Logger:
     """
     Convenience function to get a logger instance.

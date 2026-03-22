@@ -2,8 +2,9 @@ import base64
 import gzip
 import json
 import sys
-
+import time
 from app.domain.boss import BossData
+
 from app.domain.creep import LaneCreepData
 from app.domain.exceptions import DeadlockAPIError, ParserServiceError
 from app.domain.match_analysis import (
@@ -18,7 +19,7 @@ from app.services.deadlock_api_service import DeadlockAPIService
 from app.services.match_data_service import MatchDataService
 from app.services.parser_service import ParserService
 from app.utils.http_cache import compute_etag
-from app.utils.logger import get_logger
+from app.utils.logger import get_logger, fmt_duration
 
 logger = get_logger(__name__)
 
@@ -67,17 +68,22 @@ class AnalyzeMatchUseCase:
             DeadlockAPIError: If Deadlock API fails
         """
         # 1. Check cache
+        cache_start = time.perf_counter()
         match_data = await self.repo.get_match_data(match_id, schema_version, session)
+        cache_elapsed_ms = (time.perf_counter() - cache_start) * 1000
 
         if match_data:
-            logger.info("Cache hit for match_id=%s", match_id)
+            logger.info(f"Cache hit for match_id={match_id} ({fmt_duration(cache_elapsed_ms)})")
             etag = compute_etag(match_data.model_dump(), schema_version)
             return match_data, etag
 
         # 2. Cache miss - need to parse
-        logger.info("Cache miss for match_id=%s, fetching data", match_id)
+        logger.info(f"Cache miss for match_id={match_id}, fetching data")
 
+        parse_start = time.perf_counter()
         parsed_json_resp = await self._fetch_and_parse(match_id)
+        parse_elapsed_ms = (time.perf_counter() - parse_start) * 1000
+        logger.info(f"Match {match_id}: Fetch and parse completed in {fmt_duration(parse_elapsed_ms)}")
 
         # 3. Transform parser response to domain model
         match_data, etag = await self._transform_and_store(

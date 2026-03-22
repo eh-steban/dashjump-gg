@@ -1,7 +1,7 @@
 from typing import Annotated, Optional
 from fastapi.params import Depends
 from sqlmodel import select
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.match_analysis import TransformedMatchData
 from app.infra.db.parsed_match import ParsedMatch
@@ -78,6 +78,15 @@ class ParsedMatchesRepo:
             session.add(parsed_match)
             await session.commit()
             await session.refresh(parsed_match)
+        except IntegrityError as e:
+            pgcode = getattr(getattr(e, "orig", None), "pgcode", None)
+            if pgcode == "23505":
+                await session.rollback()
+                logger.warning(
+                    "Match %s already exists in DB (concurrent insert), skipping", match_id
+                )
+            else:
+                raise
         except SQLAlchemyError as e:
             # Prefer DBAPI message if present; otherwise first arg or class name
             minimal = getattr(e, "orig", None)
