@@ -100,13 +100,13 @@ cargo build --release
 
 ```bash
 # Tests
-docker-compose run --rm dashjump-parser cargo test
+docker compose exec dashjump-parser cargo test
 
 # Specific module
-docker-compose run --rm dashjump-parser cargo test creep_tracker
+docker compose exec dashjump-parser cargo test creep_tracker
 
 # With output
-docker-compose run --rm dashjump-parser cargo test -- --nocapture
+docker compose exec dashjump-parser cargo test -- --nocapture
 ```
 
 ## Domain References
