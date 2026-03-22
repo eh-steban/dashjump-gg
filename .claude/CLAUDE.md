@@ -2,6 +2,10 @@
 
 Esports analytics platform for Deadlock. Monorepo with three microservices.
 
+## Writing Style
+
+- Use `--` (double-hyphen) instead of em-dashes (`—`) in all prose, docs, and commit messages. Em-dashes render as `<E2><80><94>` in git diffs and terminals.
+
 ## Quick Reference
 
 ```bash
@@ -72,9 +76,6 @@ See `.claude/rules/` for detailed standards:
 - `frontend/` -- React, TypeScript, visualization, testing
 - `parser/` -- Rust conventions
 - `git.md` -- Commit message conventions
-
-### Writing Style
-- Use `--` (double-hyphen) instead of em-dashes (`—`) in all prose, docs, and commit messages. Em-dashes render as `<E2><80><94>` in git diffs and terminals.
 
 ## Infrastructure
 
