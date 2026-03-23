@@ -124,7 +124,13 @@ This project uses a Product Kata-driven development workflow.
 - Product strategy: `private/product/strategy/`
 - Active experiments: `private/product/experiments/` (find `Status: active-experiment`)
 - Feature specs: `private/specs/`
-- Plans: `private/plans/` -- use `private/templates/plan.md` when creating a new plan
+- Plans: pick the right template from `private/templates/plans/`:
+
+  | Template | File location | When to use |
+  |----------|---------------|-------------|
+  | `spike.md` | `private/plans/spikes/` | Single narrow question, timebox ≤ 1 day, no implementation |
+  | `discovery.md` | `private/plans/discovery/` | Multiple unknowns blocking implementation design |
+  | `implementation.md` | `private/plans/implementation/` | Implementation where unknowns are already resolved |
 - Machine-switch state: `private/CONTEXT.md` (read at session start only)
 
 ### Knowledge Management
