@@ -194,13 +194,35 @@ PORT_DB and PORT_BACKEND values are in `scripts/wt list` or in the worktree's `.
 scripts/wt stop <name>    # docker compose down (keeps postgres-data volume)
 ```
 
+### private/ submodule branching
+
+`private/` is a git submodule. Each worktree gets its own `private/` branch that mirrors the parent branch name. This keeps learnings and docs commits isolated per feature -- agents don't step on each other, and the knowledge added by a feature is visible as a clean diff when the branch merges.
+
+`wt create` handles this automatically: it initializes the submodule and creates the matching branch. For existing worktrees that predate this behaviour, run manually:
+
+```bash
+git -C <worktree>/private checkout -b <branch-name>
+```
+
+When the feature PR merges to main, also merge the private branch:
+
+```bash
+git -C private checkout main
+git -C private merge feature/<name>
+git add private
+git commit -m "chore: update private submodule after feature/<name>"
+```
+
+`wt sync` rebases the private branch alongside the parent. `wt remove` deletes the private branch if it is already merged, or warns if it has unmerged commits.
+
 ### Merge workflow
 
 When another worktree's branch is merged to `main`, bring your worktree up to date with one command:
 
 ```bash
 scripts/wt sync <name>
-# Rebases the branch onto main, then runs alembic upgrade head against the worktree's DB.
+# Rebases the parent branch and private/ branch onto main,
+# then runs alembic upgrade head against the worktree's DB.
 # Each worktree has its own isolated postgres -- migrations don't auto-propagate.
 ```
 

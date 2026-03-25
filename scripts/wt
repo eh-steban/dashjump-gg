@@ -96,6 +96,12 @@ cmd_create() {
 
   git -C "$REPO_ROOT" worktree add "$dir" -b "$branch" main
 
+  # Populate private/ submodule and branch it to match the parent branch.
+  # Agents writing learnings/docs will commit to this branch, keeping them
+  # isolated from other worktrees until the feature is merged.
+  git -C "$dir" submodule update --init --force
+  git -C "${dir}/private" checkout -b "$branch"
+
   # Auto-generate secrets -- fresh per worktree so they don't share credentials
   local fernet_key jwt_key
   fernet_key=$(python3 -c "import os, base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())")
@@ -227,6 +233,14 @@ cmd_sync() {
   local dir="${PARENT_DIR}/${REPO_NAME}-${name}"
   echo "Rebasing ${name} onto main..."
   git -C "$dir" rebase main
+  if [[ -d "${dir}/private/.git" ]] || [[ -f "${dir}/private/.git" ]]; then
+    local private_branch
+    private_branch=$(git -C "${dir}/private" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+    if [[ -n "$private_branch" && "$private_branch" != "HEAD" && "$private_branch" != "main" ]]; then
+      echo "Rebasing private/${private_branch} onto private/main..."
+      git -C "${dir}/private" rebase main
+    fi
+  fi
   echo "Applying migrations..."
   dc "$dir" exec -T dashjump-backend alembic upgrade head
   echo "Sync complete."
@@ -247,6 +261,18 @@ cmd_remove() {
     | grep "^branch " | sed 's|branch refs/heads/||') || branch=""
 
   dc "$dir" down --volumes 2>/dev/null || true
+
+  # Clean up the private submodule branch if it matches the parent branch.
+  # Warn (don't delete) if it has commits not yet merged into private/main.
+  if [[ -n "$branch" ]] && { [[ -d "${dir}/private/.git" ]] || [[ -f "${dir}/private/.git" ]]; }; then
+    local private_branch
+    private_branch=$(git -C "${dir}/private" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+    if [[ "$private_branch" == "$branch" ]]; then
+      git -C "${REPO_ROOT}/private" branch -d "$branch" 2>/dev/null \
+        || echo "Note: private branch '$branch' has unmerged commits -- merge into private/main first, then: git -C private branch -D $branch"
+    fi
+  fi
+
   # Docker bind mounts (./backend, ./parser) create root-owned files (__pycache__, Rust
   # target artifacts). sudo rm bypasses ownership entirely; worktree prune cleans git metadata.
   sudo rm -rf "$dir"
