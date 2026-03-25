@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use haste::entities::{Entity, fkey_from_path};
+use tracing::error;
 use haste::parser::Context;
 
 use crate::domain::BossSnapshot;
@@ -75,7 +76,10 @@ impl BossTracker {
         hash: u64,
         current_time_s: u32,
     ) {
-        let position = get_entity_position(entity);
+        let position = get_entity_position(entity).unwrap_or_else(|| {
+            error!("[boss_tracker] boss entity (index={}) has no position on CREATE, defaulting to origin", entity.index());
+            [0.0, 0.0, 0.0]
+        });
         let team = entity.get_value(&TEAM_KEY).unwrap_or(0);
         let lane = entity.get_value::<i32>(&self.lane_key).unwrap_or(0);
         let health = entity.get_value::<i32>(&self.health_key).unwrap_or(0);
