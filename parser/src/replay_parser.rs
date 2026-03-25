@@ -10,10 +10,10 @@ use haste::demostream::CmdHeader;
 use haste::entities::{DeltaHeader, Entity, ehandle_to_index, fkey_from_path};
 use haste::parser::{Context, Parser, Visitor};
 use haste::valveprotos::deadlock::{
-    CCitadelUserMessageDamage, CCitadelUserMsgPostMatchDetails, CMsgMatchMetaDataContents,
+    CCitadelUserMessageDamage, CCitadelUserMsgPostMatchDetails, CMsgMatchMetaDataContentsPatched,
     CitadelUserMessageIds,
 };
-use haste::valveprotos::prost::Message;
+use prost::Message;
 use tracing::{error, info};
 
 use crate::domain::{DamageRecord, Player, PlayerPosition};
@@ -21,6 +21,18 @@ use crate::domain::{DamageRecord, Player, PlayerPosition};
 use crate::entities::constants::*;
 use crate::tracking::{BossTracker, CreepTracker};
 use crate::utils::{get_entity_position, get_steam_id32};
+
+/// Thin error wrapper for the Visitor boundary.
+/// Internal helpers use anyhow::Result; the From impls let `?` convert automatically.
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub struct ParseError(#[from] anyhow::Error);
+
+impl From<prost::DecodeError> for ParseError {
+    fn from(e: prost::DecodeError) -> Self {
+        ParseError(anyhow::Error::from(e))
+    }
+}
 
 /// Main visitor that collects all match data during parsing
 #[derive(Debug)]
@@ -76,7 +88,7 @@ impl MyVisitor {
 
     /// Check if lane swap is locked and update player lane/color
     fn check_and_update_lane_lock(&mut self, entity: &Entity) -> Result<()> {
-        if entity.serializer().serializer_name.str.as_ref() != "CCitadelPlayerController" {
+        if !entity.serializer_name_heq(CCITADELPLAYERCONTROLLER_ENTITY) {
             return Ok(());
         }
 
@@ -236,8 +248,9 @@ impl MyVisitor {
             CNPC_NECROSKELE_ENTITY => 34,
             CCITADEL_GRAVESTONE_BLOCKER_ENTITY => 35,
             _ => panic!(
-                "Unknown entity - Name: {}, Hash: {}",
-                serializer_entity_name.str, serializer_entity_name.hash
+                "Unknown entity - Index: {}, Hash: {}",
+                entity.index(),
+                serializer_entity_name.hash,
             ),
         }
     }
@@ -284,7 +297,12 @@ impl MyVisitor {
 }
 
 impl Visitor for &mut MyVisitor {
-    fn on_tick_end(&mut self, ctx: &Context) -> Result<()> {
+    type Error = ParseError;
+
+    async fn on_tick_end(
+        &mut self,
+        ctx: &Context,
+    ) -> Result<(), ParseError> {
         let next_window = (((1 + ctx.tick()) as f32) * ctx.tick_interval()).round() as u32;
         let this_window = ((ctx.tick() as f32) * ctx.tick_interval()).round() as u32;
 
@@ -311,7 +329,14 @@ impl Visitor for &mut MyVisitor {
                 if !self.should_track_position(entity) {
                     continue;
                 }
-                let position = get_entity_position(entity);
+                let Some(position) = get_entity_position(entity) else {
+                    error!(
+                        "[parse_replay] tracked entity has no position (bug): Hash={}, Index={}",
+                        entity.serializer().serializer_name.hash,
+                        entity.index(),
+                    );
+                    continue;
+                };
                 let custom_id = self.get_custom_id(ctx, entity);
                 let is_npc = self.is_npc_entity(entity);
 
@@ -346,12 +371,12 @@ impl Visitor for &mut MyVisitor {
         Ok(())
     }
 
-    fn on_entity(
+    async fn on_entity(
         &mut self,
         ctx: &Context,
         delta_header: DeltaHeader,
         entity: &Entity,
-    ) -> Result<()> {
+    ) -> Result<(), ParseError> {
         // Handle game rules for match start time
         if entity.serializer_name_heq(DEADLOCK_GAMERULES_ENTITY) {
             self.handle_game_rules(entity, ctx.tick())?;
@@ -381,7 +406,6 @@ impl Visitor for &mut MyVisitor {
                 // because all subsequent UPDATE events also arrive with lane=0 and are
                 // filtered out before updating its position.
                 if match_started && CreepTracker::is_creep_entity(hash) {
-                    let position = get_entity_position(entity);
                     let team: u32 = entity.get_value(&TEAM_KEY).unwrap_or(0);
                     let lane: i32 = entity.get_value(&NPC_LANE_KEY).unwrap_or(0);
                     let npc_state: i32 = entity
@@ -393,6 +417,13 @@ impl Visitor for &mut MyVisitor {
                         .unwrap_or(LIFE_ALIVE);
                     let health: i32 = entity.get_value(&HEALTH_KEY).unwrap_or(0);
                     if lane != 0 {
+                        let Some(position) = get_entity_position(entity) else {
+                            error!(
+                                "[parse_replay] creep entity has no position on CREATE (bug): Index={}",
+                                entity.index()
+                            );
+                            return Ok(());
+                        };
                         let match_time_s = self.total_match_time_s.saturating_sub(
                             self.match_start_time_s.unwrap_or(0),
                         );
@@ -430,7 +461,13 @@ impl Visitor for &mut MyVisitor {
                 // during the zipline-to-walking transition), while unregistered entities with
                 // lane=0 are skipped to prevent ghost creep registration.
                 if match_started && CreepTracker::is_creep_entity(hash) {
-                    let position = get_entity_position(entity);
+                    let Some(position) = get_entity_position(entity) else {
+                        error!(
+                            "[parse_replay] creep entity has no position on UPDATE (bug): Index={}",
+                            entity.index()
+                        );
+                        return Ok(());
+                    };
                     let team: u32 = entity.get_value(&TEAM_KEY).unwrap_or(0);
                     let lane: i32 = entity.get_value(&NPC_LANE_KEY).unwrap_or(0);
                     let npc_state: i32 = entity
@@ -463,11 +500,21 @@ impl Visitor for &mut MyVisitor {
         Ok(())
     }
 
-    fn on_cmd(&mut self, _ctx: &Context, _cmd_header: &CmdHeader, _data: &[u8]) -> Result<()> {
+    async fn on_cmd(
+        &mut self,
+        _ctx: &Context,
+        _cmd_header: &CmdHeader,
+        _data: &[u8],
+    ) -> Result<(), ParseError> {
         Ok(())
     }
 
-    fn on_packet(&mut self, ctx: &Context, packet_type: u32, data: &[u8]) -> Result<()> {
+    async fn on_packet(
+        &mut self,
+        ctx: &Context,
+        packet_type: u32,
+        data: &[u8],
+    ) -> Result<(), ParseError> {
         if packet_type == CitadelUserMessageIds::KEUserMsgDamage as u32 {
             let msg = CCitadelUserMessageDamage::decode(data)?;
             let entities = ctx.entities().unwrap();
@@ -513,8 +560,8 @@ impl Visitor for &mut MyVisitor {
             if let Err(error) =
                 self.push_damage_record(ctx, attacker.unwrap(), victim.unwrap(), record)
             {
-                println!("Failed to push damage record: {:?}", error);
-                return Err(error);
+                error!("[parse_replay] Failed to push damage record: {:?}", error);
+                return Err(error.into());
             }
         }
 
@@ -523,7 +570,7 @@ impl Visitor for &mut MyVisitor {
             let details_msg = CCitadelUserMsgPostMatchDetails::decode(data)?;
             if let Some(bytes) = details_msg.match_details {
                 let mut cursor = std::io::Cursor::new(bytes);
-                if let Ok(meta) = CMsgMatchMetaDataContents::decode(&mut cursor) {
+                if let Ok(meta) = CMsgMatchMetaDataContentsPatched::decode(&mut cursor) {
                     if let Some(match_info) = meta.match_info {
                         if let Some(damage_matrix) = match_info.damage_matrix {
                             println!(
@@ -542,7 +589,7 @@ impl Visitor for &mut MyVisitor {
 }
 
 /// Parse a replay file and return match data as JSON
-pub fn parse_replay(replay_full_path: &str) -> Result<serde_json::Value> {
+pub async fn parse_replay(replay_full_path: &str) -> Result<serde_json::Value> {
     // Get file size for logging
     let file_size = fs::metadata(replay_full_path).map(|m| m.len()).unwrap_or(0);
     info!(
@@ -569,7 +616,7 @@ pub fn parse_replay(replay_full_path: &str) -> Result<serde_json::Value> {
     info!("[parse_replay] Parser created successfully");
 
     info!("[parse_replay] Running parser to end of demo...");
-    parser.run_to_end().map_err(|e| {
+    parser.run_to_end().await.map_err(|e| {
         error!("[parse_replay] Parser failed during run_to_end: {:?}", e);
         anyhow::anyhow!("Parser failed during run_to_end: {:?}", e)
     })?;
