@@ -6,13 +6,16 @@ from fastapi.middleware.gzip import GZipMiddleware
 # Only need the line below for now. Uncomment the line above
 # when we implement internal API endpoints.
 from app.api import auth, account, match, users, replay, session
+from app.config import get_settings
 
 app = FastAPI()
 # Initialize logger manager (singleton)
 LoggerManager()
 
+settings = get_settings()
+
 # Configure CORS to work w/ React frontend
-origins = ["http://localhost:3000"]
+origins = [settings.FRONTEND_BASE_URL]
 
 app.add_middleware(
     CORSMiddleware,
