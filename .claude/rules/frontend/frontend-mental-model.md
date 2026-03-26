@@ -7,19 +7,7 @@ paths:
 ---
 # Frontend Mental Model
 
-## Status: TODO
-
-This file is a stub. Populate it as architectural patterns and constraints are discovered in the frontend service.
-
-## What Goes Here
-
-Service-specific architecture deep-dives that are:
-- Non-obvious constraints that would cause expensive debugging if not documented
-- Visualization patterns specific to match analytics
-- State management patterns for time-scrubbing and game phase filtering
-- Performance constraints unique to rendering large datasets
-
-## Candidate Topics (to be expanded)
+## Candidate Topics
 
 ### Timeline Scrubbing Architecture
 The match timeline allows coaches to scrub through game time. When this is built out, document:

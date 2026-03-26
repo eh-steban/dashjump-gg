@@ -309,5 +309,3 @@ let is_active = life_state == LIFE_ALIVE
 - Use positions.len() for match duration (not total_match_time_s -- see rough edge note above)
 
 **Core rule:** positions[0] is match second 0. Index directly; no offset required.
-
-**See also:** `private/learnings.md` — Drafts section for the timeline alignment change note.

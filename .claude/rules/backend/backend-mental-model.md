@@ -63,10 +63,4 @@ Do not add backend staleness filters to work around ghost creep positions. A pos
 
 ---
 
-## Data Transformation Pipeline
-
-(Populate after S3 migration is implemented -- the mapper layer will have non-trivial logic)
-
----
-
 **See `.claude/knowledge-management.md` for when and how to populate this file.**
