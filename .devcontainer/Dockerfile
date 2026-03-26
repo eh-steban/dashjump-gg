@@ -53,6 +53,12 @@ RUN curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
     && apt-get install -y google-chrome-stable \
     && rm -rf /var/lib/apt/lists/*
 
+# === Neovim ===
+RUN curl -LO https://github.com/neovim/neovim/releases/download/v0.10.4/nvim-linux-x86_64.tar.gz \
+    && tar -C /opt -xzf nvim-linux-x86_64.tar.gz \
+    && ln -s /opt/nvim-linux-x86_64/bin/nvim /usr/local/bin/nvim \
+    && rm nvim-linux-x86_64.tar.gz
+
 # === Node.js 24 ===
 RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
     && apt-get install -y nodejs \
@@ -77,6 +83,8 @@ RUN add-apt-repository ppa:deadsnakes/ppa \
 # Create user early so Rust and pip install to user directories (avoids duplication)
 RUN useradd -m -u 1000 -s /bin/bash lifted \
     && mkdir -p /home/lifted/.local/bin \
+    && mkdir -p /home/lifted/.local/share/nvim \
+    && mkdir -p /home/lifted/.config/nvim \
     && mkdir -p /home/lifted/.claude \
     && touch /home/lifted/.bashrc \
     && touch /home/lifted/.bash_history \
@@ -90,8 +98,9 @@ ENV PATH="/home/lifted/.cargo/bin:/home/lifted/.local/bin:${PATH}"
 # === Rust and pip for user ===
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
     && cargo install cargo-watch \
+    && rustup component add rust-analyzer \
     && python3 -m pip install --user --upgrade pip \
-    && python3 -m pip install --user pyright
+    && python3 -m pip install --user pyright pynvim
 
 # Set npm global prefix via environment so it persists across all RUN layers
 ENV npm_config_prefix=/home/lifted/.local

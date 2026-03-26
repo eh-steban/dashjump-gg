@@ -5,6 +5,8 @@ WORKDIR /app
 # -d/-m relocates the home directory so Playwright's browser cache path is consistent.
 RUN usermod -l lifted -d /home/lifted -m node && groupmod -n lifted node
 
+RUN apt-get update && apt-get install -y vim && rm -rf /var/lib/apt/lists/*
+
 COPY package*.json ./
 RUN npm ci
 

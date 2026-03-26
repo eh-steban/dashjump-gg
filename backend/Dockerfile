@@ -5,7 +5,7 @@ WORKDIR /backend
 # RUN apt-get update && apt-get install -y libpq-dev gcc && apt-get clean
 # NOTE: Might need to change this for production
 # I'm considering versioning issues here
-RUN apt-get update && apt-get install -y postgresql-client
+RUN apt-get update && apt-get install -y postgresql-client vim
 RUN pip install --no-cache-dir --upgrade pip
 
 # Use UID 1000 to match devcontainer (avoids permission issues with mounted volumes)

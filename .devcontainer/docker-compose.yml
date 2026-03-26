@@ -6,13 +6,15 @@ services:
       dockerfile: dashjump-gg/.devcontainer/Dockerfile
 
     volumes:
-      # Mount only this project
-      - ../dashjump-gg:/workspaces/dashjump-gg:cached
+      # Mount parent directory so all worktrees are accessible at /workspaces/<name>
+      - ..:/workspaces:cached
       # Persist cargo cache for faster Rust builds
       - cargo-cache:/home/lifted/.cargo/registry
       # Mount entire Claude Code state dir so auth, settings, plugins, history, and
       # onboarding markers all persist across container rebuilds.
       - ~/.claude:/home/lifted/.claude
+      - ~/.config/nvim:/home/lifted/.config/nvim
+      - nvim-data:/home/lifted/.local/share/nvim
       # File set aside just for container specific bashrc settings
       - ~/.container-bashrc:/home/lifted/.bashrc
       - ~/.bash_aliases:/home/lifted/.bash_aliases
@@ -43,3 +45,4 @@ services:
 
 volumes:
   cargo-cache:
+  nvim-data:

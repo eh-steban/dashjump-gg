@@ -3,7 +3,7 @@ FROM rust:latest
 WORKDIR /parser
 
 RUN apt-get update && \
-    apt-get install -y protobuf-compiler && \
+    apt-get install -y protobuf-compiler vim && \
     rm -rf /var/lib/apt/lists/*
 
 # Use UID 1000 to match devcontainer (avoids permission issues with mounted volumes)
