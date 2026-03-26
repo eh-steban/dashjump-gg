@@ -7,6 +7,80 @@ paths:
 ---
 # Backend Mental Model
 
+## Module Structure
+
+```
+backend/
+├── app/
+│   ├── api/                          # HTTP Layer (thin routes)
+│   │   ├── match.py
+│   │   ├── auth.py
+│   │   ├── users.py
+│   │   ├── account.py
+│   │   ├── replay.py
+│   │   └── session.py
+│   │
+│   ├── application/                  # Use Cases / Orchestration
+│   │   ├── mappers/                  # ORM → Domain model mapping
+│   │   │   └── match_mapper.py
+│   │   └── use_cases/
+│   │       ├── analyze_match.py
+│   │       └── ...
+│   │
+│   ├── domain/                       # Business Logic (pure, no framework deps)
+│   │   ├── models/                   # Entities & Value Objects
+│   │   │   ├── match_analysis.py
+│   │   │   ├── player.py
+│   │   │   ├── boss.py
+│   │   │   ├── steam_account.py
+│   │   │   └── deadlock_api.py
+│   │   ├── services/                 # Domain Services (pure, no I/O)
+│   │   │   ├── transform_match_data.py
+│   │   │   └── ...
+│   │   └── exceptions.py
+│   │
+│   ├── infra/                        # Infrastructure Layer
+│   │   ├── db/
+│   │   │   ├── models/               # SQLModel table definitions
+│   │   │   ├── repositories/         # Data access layer
+│   │   │   ├── session.py
+│   │   │   └── migrations/
+│   │   ├── external/                 # External API clients
+│   │   │   └── deadlock_api_client.py
+│   │   └── storage/                  # Future: S3 storage
+│   │
+│   ├── utils/                        # Cross-cutting utilities
+│   │   ├── datetime_utils.py
+│   │   ├── http_cache.py
+│   │   ├── logger.py
+│   │   └── steam_id_utils.py
+│   │
+│   ├── config.py
+│   └── main.py
+│
+├── tests/                            # Mirrors app/ structure
+│   ├── api/
+│   ├── application/
+│   │   ├── mappers/
+│   │   └── use_cases/
+│   ├── domain/
+│   │   ├── models/
+│   │   └── services/
+│   ├── infra/
+│   │   └── db/
+│   │       └── repositories/
+│   └── conftest.py
+│
+├── Dockerfile
+├── pyproject.toml
+└── requirements.txt
+```
+
+> **Navigation note:** This shows the target DDD architecture. Current layout diverges:
+> `domain/` files are directly in `domain/` (no `models/` subdir) · Services at `app/services/` · Repos at `app/repo/` · `infra/external/` → `infra/deadlock_api/`
+
+---
+
 ## S3 Storage Strategy
 
 **Status:** Evaluated (not yet implemented)

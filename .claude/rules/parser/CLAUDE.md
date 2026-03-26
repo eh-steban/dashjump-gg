@@ -7,46 +7,9 @@ paths:
 
 Rust/Axum microservice that extracts match data from Deadlock replay (demo) files.
 
-## Current Structure
+## Structure
 
-```
-parser/
-├── src/
-│   ├── main.rs               # Axum server setup, module registration
-│   ├── config.rs             # Configuration constants
-│   ├── replay_parser.rs      # Core parsing coordinator (~400 lines)
-│   │
-│   ├── domain/               # Data Structures (pure, serializable)
-│   │   ├── player.rs         # Player, PlayerPosition
-│   │   ├── boss.rs           # BossSnapshot
-│   │   ├── damage.rs         # DamageRecord
-│   │   └── creep.rs          # CreepSnapshot, LaneCreepData, WaveMeta
-│   │
-│   ├── entities/             # Entity Identification
-│   │   └── constants.rs      # Entity hashes, field keys (fkey_from_path)
-│   │
-│   ├── tracking/             # Stateful Trackers
-│   │   ├── boss_tracker.rs   # BossTracker (spawn/despawn lifecycle)
-│   │   └── creep_tracker/    # CreepTracker (per-creep lane tracking)
-│   │       ├── mod.rs        #   implementation
-│   │       └── tests.rs      #   unit tests
-│   │
-│   ├── utils/                # Pure Helper Functions
-│   │   ├── entity_position.rs # get_entity_position()
-│   │   └── steam_id.rs       # steamid64_to_accountid()
-│   │
-│   ├── handlers/             # HTTP Route Handlers
-│   │   ├── check_demo.rs
-│   │   └── parse_demo.rs
-│   │
-│   └── demo/                 # Demo File Operations
-│       ├── downloader.rs
-│       └── decompressor.rs
-│
-├── Cargo.toml
-├── Dockerfile
-└── docker-compose.yaml
-```
+See `.claude/rules/parser/parser-mental-model.md` for the full module structure diagram.
 
 ## Module Dependency Rules
 

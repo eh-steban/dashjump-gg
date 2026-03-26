@@ -68,6 +68,7 @@ Specialized subagents for autonomous work:
 - `code-reviewer` -- Security, convention, logic, and test coverage review (read-only)
 - `test-auditor` -- Periodic test suite audit across all services (read-only)
 - `e2e-playwright` -- Cross-service end-to-end tests spanning full user flows
+- `dashjump-designer` -- UI/UX design specialist: visual work, layouts, design system (brand-aware; for logic-heavy components use `frontend-react`)
 
 ## Coding Standards
 
@@ -169,14 +170,8 @@ Every completed unit of work must meet these standards:
 5. After completing a shard: run the "Verify before proceeding" check
 
 ### Context Budgets (enforce when creating/updating files)
-- Root CLAUDE.md: ≤200 lines (~2,000 tokens)
-- Subdirectory CLAUDE.md: ≤100 lines each
-- Spec task shards: ≤2,000 tokens per shard
-- Skills: keep under 5,000 tokens each
-- Experiment kata.md: move completed steps to learnings.md to prevent bloat
-- MCP servers: maximum 3 active simultaneously
 - Clear at 30%: Don't wait for context to fill. Quality degrades noticeably past 30%.
-- Full budget reference: .claude/skills/dashjump-context-audit/references/context-budgets.md
+- Full budget reference: `.claude/skills/dashjump-context-audit/references/context-budgets.md`
 
 ### Project Health Auditing
 - Run the dashjump-context-audit skill periodically to audit all .claude/ files

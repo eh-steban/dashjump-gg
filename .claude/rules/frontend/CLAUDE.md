@@ -9,75 +9,9 @@ paths:
 
 React/TypeScript web application for viewing match analytics and visualizations.
 
-## Current Structure
+## Structure
 
-```
-frontend/
-├── src/
-│   ├── api/                          # API Clients
-│   │   └── matchAnalysis.ts
-│   │
-│   ├── domain/                       # Domain Models (mirrors backend)
-│   │   ├── matchAnalysis.ts
-│   │   ├── player.ts
-│   │   ├── boss.ts
-│   │   ├── timeline.ts
-│   │   └── ...
-│   │
-│   ├── services/                     # Business Logic
-│   │   ├── damage/
-│   │   │   ├── index.ts
-│   │   │   ├── aggregation.ts
-│   │   │   └── helpers.ts
-│   │   └── timeline/
-│   │       └── index.ts
-│   │
-│   │
-│   ├── components/                   # Feature-grouped Components
-│   │   ├── matchAnalysis/
-│   │   │   ├── MatchTimeViewer.tsx
-│   │   │   ├── Minimap.tsx
-│   │   │   ├── PlayerCards.tsx
-│   |   |   ├── hooks/                        # React Hooks
-│   |   |   │   └── useMatchAnalysis.ts
-│   │   │   └── ...
-│   │   ├── damageAnalysis/
-│   │   │   ├── PlayerDamageDistribution.tsx
-│   │   │   └── ...
-│   │   ├── profile/
-│   │   └── login/
-│   │
-│   ├── pages/                        # Route-level Components
-│   │   ├── MatchAnalysis.tsx
-│   │   └── ...
-│   │
-│   ├── data/                         # Static Data
-│   │   ├── combatTypes.ts
-│   │   ├── regions.ts
-│   │   └── ...
-│   │
-│   ├── utils/                        # Utilities
-│   │   └── time.ts
-│   │
-│   ├── App.tsx
-│   ├── index.tsx
-│   └── vite-env.d.ts                 # TypeScript defs for Vite env vars
-│
-├── tests/                            # Mirrors src/ structure
-│   ├── setup.ts                      # Global test setup (cleanup)
-│   ├── api/
-│   ├── domain/
-│   ├── services/
-│   ├── components/
-│   └── pages/
-│
-├── Dockerfile
-├── package.json
-└── vite.config.ts                    # Includes Vitest config in `test` block
-```
-
-> **Navigation note:** This shows the target architecture. Current layout diverges:
-> `matchAnalysis/` has 15+ components (CreepWave, LanePressure, Objectives, etc.) · No `hooks/` subdir yet · `domain/` has additional types (boss, creep, lanePressure, matchMetadata, etc.) · Required env var: `VITE_BACKEND_DOMAIN`
+See `.claude/rules/frontend/frontend-mental-model.md` for the full module structure diagram.
 
 ## Layer Dependency Rules
 

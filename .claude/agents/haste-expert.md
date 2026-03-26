@@ -67,7 +67,7 @@ When a product feature needs data that isn't clearly documented:
 
 **prost enum naming:** `k_EUserMsg_BossKilled` becomes `KEUserMsgBossKilled` in Rust.
 
-**Our parser dependency:** `blukai/haste` (sync Visitor methods), NOT `deadlock-api/haste` (async). Check `parser/Cargo.toml` to confirm.
+**Our parser dependency:** `deadlock-api/haste` (async Visitor methods). Migrated from `blukai/haste` in March 2026. Check `parser/Cargo.toml` to confirm.
 
 **Tick timing:** Deadlock runs at 1/60s ticks. Convert tick to game time: `tick as f32 * ctx.tick_interval()`.
 

@@ -10,7 +10,7 @@ Scan all test files across all three services and report:
 Current known state:
 - Frontend: tests present (Vitest + RTL + Playwright browser)
 - Backend: tests present (pytest, DDD-layered)
-- Parser: 0 tests (critical gap)
+- Parser: unit tests present in `tracking/creep_tracker/tests.rs`; other modules untested (gap)
 
 Use the test-auditor agent for this work. Output should be actionable —
 each gap should specify what to test and estimated effort.

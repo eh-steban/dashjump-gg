@@ -50,4 +50,4 @@ Omit this line if: no Steven-owned findings were flagged, OR you were invoked by
 ## Do NOT
 - Make implementation decisions (that's for service agents)
 - Write code (that's for service agents)
-- Skip the North Star document before any feature spec
+- Skip the North Star document (`private/product/strategy/vision.md`) before any feature spec

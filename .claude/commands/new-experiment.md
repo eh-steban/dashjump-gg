@@ -1,3 +1,5 @@
+Use the spec-writer agent for this command.
+
 Create a new experiment directory in private/product/experiments/.
 
 1. Find the highest-numbered existing experiment directory
