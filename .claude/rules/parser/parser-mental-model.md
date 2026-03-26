@@ -262,7 +262,7 @@ Confirmed observable states (from probe + live testing):
 | INIT (0) | any | Pre-spawn, uninitialized | No |
 | INVALID (-1) | any | Sentinel / unknown | No |
 
-**Known limitation:** Some creep entities in Valve's demo never receive a death state update. They retain `ALIVE + COMBAT` from their last fighting state until a DELETE event fires (which may be triggered by an objective being destroyed, not the creep's own death). These entities appear frozen on the minimap at the death position until the game event cleans them up. This is a Valve demo behavior -- not fixable at the application level.
+**Ghost creep mechanism and fix (March 2026):** When a creep dies mid-lane it transitions to `NPC_STATE_INERT + LIFE_ALIVE` -- the initial post-death recycling state. `m_iHealth` reaches 0 in the same tick as the fatal blow, before the AI state machine catches up. Adding `health > 0` to the whitelist catches this: a stunned-but-alive creep has `health > 0`; a dead creep stuck in `INERT + ALIVE` has `health == 0`. Ghost creeps consistently disappear at wave spawn boundaries (the DEAD→ALIVE recycling tick). Entities that never receive any death state update (rare; observed near objective kills) may briefly appear frozen until DELETE fires -- this is a Valve demo edge case affecting a small number of ticks.
 
 ### Whitelist Approach for Snapshot Suppression
 
@@ -273,10 +273,11 @@ A blacklist (suppress known-dead states) fails silently whenever an undocumented
 ```rust
 // Whitelist: emit only when confirmed alive in lane
 let is_active = life_state == LIFE_ALIVE
+    && health > 0
     && matches!(npc_state, NPC_STATE_IDLE | NPC_STATE_ALERT | NPC_STATE_COMBAT | NPC_STATE_INERT);
 ```
 
-`NPC_STATE_INERT` is included because it covers stunned creeps (alive, not fighting) AND cage entities traveling the zipline (both legitimate render cases). The `life_state == LIFE_ALIVE` guard correctly excludes INERT entities that are dead-and-recycling.
+`NPC_STATE_INERT` is included because it covers stunned creeps (alive, not fighting) AND cage entities traveling the zipline (both legitimate render cases). The `life_state == LIFE_ALIVE` guard excludes INERT entities that are dead-and-recycling. The `health > 0` guard catches the gap where a freshly-dead creep has not yet exited ALIVE+INERT but has already had health zeroed by the damage system -- see ghost creep note above.
 
 ---
 

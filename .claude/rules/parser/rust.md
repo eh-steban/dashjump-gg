@@ -23,13 +23,37 @@ paths:
 ```
 parser/
 ├── src/
-│   ├── main.rs               # Axum server setup
-│   ├── replay_parser.rs      # Core parsing logic
-│   ├── handlers/             # HTTP route handlers
-│   │   └── parse.rs
-│   └── models/               # Rust structs for data shapes
-│       └── ...
-├── tests/
+│   ├── main.rs               # Axum server setup, module registration
+│   ├── config.rs             # Configuration constants
+│   ├── replay_parser.rs      # Core parsing coordinator (~400 lines)
+│   │
+│   ├── domain/               # Data Structures (pure, serializable)
+│   │   ├── player.rs         # Player, PlayerPosition
+│   │   ├── boss.rs           # BossSnapshot
+│   │   ├── damage.rs         # DamageRecord
+│   │   └── creep.rs          # CreepSnapshot, LaneCreepData, WaveMeta
+│   │
+│   ├── entities/             # Entity Identification
+│   │   └── constants.rs      # Entity hashes, field keys (fkey_from_path)
+│   │
+│   ├── tracking/             # Stateful Trackers
+│   │   ├── boss_tracker.rs   # BossTracker (spawn/despawn lifecycle)
+│   │   └── creep_tracker/    # CreepTracker (per-creep lane tracking)
+│   │       ├── mod.rs        #   implementation
+│   │       └── tests.rs      #   unit tests
+│   │
+│   ├── utils/                # Pure Helper Functions
+│   │   ├── entity_position.rs # get_entity_position()
+│   │   └── steam_id.rs       # steamid64_to_accountid()
+│   │
+│   ├── handlers/             # HTTP Route Handlers
+│   │   ├── check_demo.rs
+│   │   └── parse_demo.rs
+│   │
+│   └── demo/                 # Demo File Operations
+│       ├── downloader.rs
+│       └── decompressor.rs
+│
 ├── Cargo.toml
 ├── Dockerfile
 └── docker-compose.yaml
@@ -37,7 +61,7 @@ parser/
 
 ## Error Handling
 
-See `parser/error-handling.md` for detailed error handling standards.
+See `.claude/rules/parser/error-handling.md` for detailed error handling standards.
 
 ### Quick Reference
 
