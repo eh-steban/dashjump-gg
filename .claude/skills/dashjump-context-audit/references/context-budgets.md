@@ -8,7 +8,7 @@ root CLAUDE.md, and the claude-md-management plugin.
 | File Type | Budget | Notes |
 |---|---|---|
 | Root CLAUDE.md | ≤200 lines (~2,000 tokens) | Index/pointers only, loads every session |
-| Subdirectory CLAUDE.md | ≤100 lines each | Lazy-loads when Claude reads files in subtree |
+| Subdirectory CLAUDE.md | ≤150 lines each | Lazy-loads when Claude reads files in subtree |
 | Agent definitions | No hard limit, target ≤150 lines | Longer agents may need scope reduction |
 | Slash commands | No hard limit, target ≤80 lines | Must be self-contained |
 | Skills (SKILL.md) | ≤5,000 tokens | Description loads always; body on invocation |
@@ -26,7 +26,7 @@ root CLAUDE.md, and the claude-md-management plugin.
 - **MCP servers:** Maximum 3 active simultaneously. Each adds tool definitions to the
   system prompt.
 - **Subdirectory CLAUDE.md:** Lazy-loaded only when Claude reads files in that subtree.
-  Don't put universal rules here — they belong in root CLAUDE.md.
+  Don't put universal rules here -- they belong in root CLAUDE.md.
 - **Skills descriptions:** Load at session start (always in context). Keep descriptions
   under ~100 words. Full skill content loads only on invocation.
 
