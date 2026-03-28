@@ -18,6 +18,7 @@ use std::io::BufReader;
 
 use anyhow::Result;
 use haste::demofile::DemoFile;
+
 use haste::demostream::CmdHeader;
 use haste::entities::{DeltaHeader, Entity, ehandle_to_index, fkey_from_path};
 use haste::fxhash;
@@ -27,7 +28,13 @@ use haste::valveprotos::deadlock::{
     CCitadelUserMessageCurrencyChanged,
     CCitadelUserMsgGoldHistory,
 };
-use haste::valveprotos::prost::Message;
+use prost::Message;
+
+/// Thin error wrapper so the Visitor::Error bound (`std::error::Error + Send + Sync + 'static`)
+/// is satisfied. Internal helpers use anyhow::Result; the From impl lets `?` convert.
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+struct ProbeError(#[from] anyhow::Error);
 
 const DEADLOCK_GAMERULES_ENTITY: u64 = fxhash::hash_bytes(b"CCitadelGameRulesProxy");
 const CCITADELPLAYERPAWN_ENTITY: u64 = fxhash::hash_bytes(b"CCitadelPlayerPawn");
@@ -115,7 +122,10 @@ impl ProbeVisitor {
         let controller_index = ehandle_to_index(owner_handle);
         let controller = entities.get(&controller_index)?;
         let slot: u32 = controller.get_value(&LOBBY_PLAYER_SLOT_KEY)?;
-        let name: String = controller.get_value(&PLAYER_NAME_KEY).unwrap_or_default();
+        let name: String = controller
+            .get_value::<Box<[u8]>>(&PLAYER_NAME_KEY)
+            .map(|b| String::from_utf8_lossy(&b).into_owned())
+            .unwrap_or_default();
 
         self.pawn_to_slot.insert(entindex, slot);
         self.slot_to_pawn.insert(slot, entindex);
@@ -129,8 +139,9 @@ impl ProbeVisitor {
     }
 
     fn handle_currency_changed(&mut self, msg: CCitadelUserMessageCurrencyChanged, ctx: &Context) {
-        let pawn_index = msg.entindex_hero_pawn.unwrap_or(-1);
-        if pawn_index < 0 {
+        // Note: entindex_hero_pawn was removed from this proto; userid is now the player key.
+        let player_userid = msg.userid.unwrap_or(-1);
+        if player_userid < 0 {
             return;
         }
 
@@ -154,26 +165,27 @@ impl ProbeVisitor {
 
         self.total_currency_events += 1;
 
-        // Resolve player and accumulate balance
-        let slot = self.resolve_pawn_to_slot(pawn_index, ctx);
-        if let Some(_slot) = slot {
-            let player = self.players.entry(pawn_index).or_default();
-            player.balance += delta as i64;
+        // Accumulate balance keyed by userid (entity-based pawn lookup no longer available)
+        let player = self.players.entry(player_userid).or_insert_with(|| PlayerState {
+            name: format!("userid:{}", player_userid),
+            lobby_slot: player_userid as u32,
+            ..Default::default()
+        });
+        player.balance += delta as i64;
 
-            // Per-second earn accumulation
-            if match_sec != player.last_sec {
-                // Flush previous second
-                if player.last_sec > 0 || !player.earn_timeline.is_empty() {
-                    player.earn_timeline.push((player.last_sec, player.earn_this_sec));
-                    player.balance_timeline.push((player.last_sec, player.balance - delta as i64));
-                }
-                player.earn_this_sec = 0;
-                player.last_sec = match_sec;
+        // Per-second earn accumulation
+        if match_sec != player.last_sec {
+            // Flush previous second
+            if player.last_sec > 0 || !player.earn_timeline.is_empty() {
+                player.earn_timeline.push((player.last_sec, player.earn_this_sec));
+                player.balance_timeline.push((player.last_sec, player.balance - delta as i64));
             }
+            player.earn_this_sec = 0;
+            player.last_sec = match_sec;
+        }
 
-            if delta > 0 {
-                player.earn_this_sec += delta as i64;
-            }
+        if delta > 0 {
+            player.earn_this_sec += delta as i64;
         }
     }
 
@@ -193,7 +205,9 @@ impl ProbeVisitor {
 }
 
 impl Visitor for &mut ProbeVisitor {
-    fn on_entity(&mut self, _ctx: &Context, _delta_header: DeltaHeader, entity: &Entity) -> Result<()> {
+    type Error = ProbeError;
+
+    async fn on_entity(&mut self, _ctx: &Context, _delta_header: DeltaHeader, entity: &Entity) -> Result<(), ProbeError> {
         if entity.serializer().serializer_name.hash == DEADLOCK_GAMERULES_ENTITY {
             if let Ok(t) = entity.try_get_value::<f32>(&GAME_START_KEY) {
                 if t > 0.001 && self.match_start_time_s.is_none() {
@@ -205,23 +219,26 @@ impl Visitor for &mut ProbeVisitor {
         Ok(())
     }
 
-    fn on_packet(&mut self, ctx: &Context, packet_type: u32, data: &[u8]) -> Result<()> {
+    async fn on_packet(&mut self, ctx: &Context, packet_type: u32, data: &[u8]) -> Result<(), ProbeError> {
         if packet_type == CitadelUserMessageIds::KEUserMsgCurrencyChanged as u32 {
-            let msg = CCitadelUserMessageCurrencyChanged::decode(data)?;
+            let msg = CCitadelUserMessageCurrencyChanged::decode(data)
+                .map_err(|e| ProbeError(anyhow::anyhow!(e)))?;
             self.handle_currency_changed(msg, ctx);
         }
         if packet_type == CitadelUserMessageIds::KEUserMsgGoldHistory as u32 {
-            let msg = CCitadelUserMsgGoldHistory::decode(data)?;
+            let msg = CCitadelUserMsgGoldHistory::decode(data)
+                .map_err(|e| ProbeError(anyhow::anyhow!(e)))?;
             self.handle_gold_history(msg);
         }
         Ok(())
     }
 
-    fn on_tick_end(&mut self, _ctx: &Context) -> Result<()> { Ok(()) }
-    fn on_cmd(&mut self, _ctx: &Context, _cmd_header: &CmdHeader, _data: &[u8]) -> Result<()> { Ok(()) }
+    async fn on_tick_end(&mut self, _ctx: &Context) -> Result<(), ProbeError> { Ok(()) }
+    async fn on_cmd(&mut self, _ctx: &Context, _cmd_header: &CmdHeader, _data: &[u8]) -> Result<(), ProbeError> { Ok(()) }
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let path = env::args().nth(1).expect("Usage: probe_currency_changed <replay.dem>");
 
     eprintln!("Probing: {}", path);
@@ -232,7 +249,7 @@ fn main() -> Result<()> {
 
     let mut visitor = ProbeVisitor::default();
     let mut parser = Parser::from_stream_with_visitor(demo_file, &mut visitor)?;
-    parser.run_to_end()?;
+    parser.run_to_end().await?;
 
     // ========== SUMMARY ==========
     println!("\n========== CURRENCY CHANGED SUMMARY ==========");
