@@ -118,6 +118,21 @@ impl BossTracker {
             boss.death_time_s = Some(current_time_s);
             boss.life_state_on_delete = entity.get_value::<i32>(&self.life_state_key);
         }
+        // Record health=0 at death time so build_health_window carry-forward shows the
+        // boss as dead for all subsequent seconds. Without this, the last non-zero damage
+        // sample (e.g. health=13) persists indefinitely, making a dead objective appear alive.
+        self.record_death_health(entity_index, current_time_s);
+    }
+
+    /// Insert a health=0 sample for `entity_index` at `current_time_s`.
+    ///
+    /// Called by `handle_boss_delete` to ensure carry-forward correctly reports
+    /// the boss as dead. Also callable directly in tests.
+    fn record_death_health(&mut self, entity_index: i32, current_time_s: u32) {
+        self.health_samples
+            .entry(entity_index)
+            .or_insert_with(Vec::new)
+            .push((current_time_s, 0));
     }
 
     /// Record boss damage event for health tracking
@@ -172,3 +187,6 @@ impl BossTracker {
         self.lane_key
     }
 }
+
+#[cfg(test)]
+mod tests;

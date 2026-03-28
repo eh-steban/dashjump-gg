@@ -1,8 +1,9 @@
 from typing import Annotated, Optional
 from fastapi.params import Depends
 from sqlmodel import select
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.domain.match_analysis import TransformedMatchData
 from app.infra.db.parsed_match import ParsedMatch
 from app.infra.db.session import get_db_session
@@ -11,6 +12,7 @@ from app.domain.exceptions import (
     MatchParseException,
     MatchDataIntegrityException,
 )
+from app.utils.datetime_utils import utcnow
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -67,29 +69,35 @@ class ParsedMatchesRepo:
         etag: str,
         session: Annotated[AsyncSession, Depends(get_db_session)],
     ) -> None:
+        # Upsert: insert on first parse, overwrite on re-parse (e.g. after a parser fix).
+        # ON CONFLICT DO UPDATE avoids a unique-violation 500 on concurrent inserts and
+        # ensures re-parses always refresh the stored data.
         try:
-            parsed_match = ParsedMatch(
+            now = utcnow()
+            stmt = pg_insert(ParsedMatch).values(
                 match_id=match_id,
                 schema_version=schema_version,
                 raw_payload_gzip=raw_payload_gzip,
                 match_data=match_data,
                 etag=etag,
+                created_at=now,
+                updated_at=now,
             )
-            session.add(parsed_match)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["match_id"],
+                set_={
+                    "schema_version": stmt.excluded.schema_version,
+                    "raw_payload_gzip": stmt.excluded.raw_payload_gzip,
+                    "match_data": stmt.excluded.match_data,
+                    "etag": stmt.excluded.etag,
+                    "updated_at": stmt.excluded.updated_at,
+                },
+            )
+            await session.execute(stmt)
             await session.commit()
-            await session.refresh(parsed_match)
-        except IntegrityError as e:
-            pgcode = getattr(getattr(e, "orig", None), "pgcode", None)
-            if pgcode == "23505":
-                await session.rollback()
-                logger.warning(
-                    "Match %s already exists in DB (concurrent insert), skipping", match_id
-                )
-            else:
-                raise
         except SQLAlchemyError as e:
-            # Prefer DBAPI message if present; otherwise first arg or class name
             minimal = getattr(e, "orig", None)
             if minimal is None:
                 minimal = e.args[0] if e.args else e.__class__.__name__
-            logger.error("Create parsed match failed: %s", minimal)
+            logger.error("Upsert parsed match failed: %s", minimal)
+            raise MatchDataIntegrityException(f"Failed to store match {match_id}")

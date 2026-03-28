@@ -37,12 +37,12 @@ class PlayerData(SQLModel):
 
 class DamageRecord(SQLModel):
     damage: Optional[int] = None
-    pre_damage: Optional[int] = None
+    pre_damage: Optional[float] = None
     type: Optional[int] = None
     citadel_type: Optional[int] = None
     entindex_inflictor: Optional[int] = None
     entindex_ability: Optional[int] = None
-    damage_absorbed: Optional[int] = None
+    damage_absorbed: Optional[float] = None
     victim_health_max: Optional[int] = None
     victim_health_new: Optional[int] = None
     flags: Optional[int] = None
