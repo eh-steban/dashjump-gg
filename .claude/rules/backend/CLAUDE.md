@@ -46,7 +46,7 @@ alembic revision --autogenerate -m "description"
 
 1. User requests match analysis via API
 2. Backend checks PostgreSQL cache
-3. If not cached: fetch demo URL → call Parser → transform → store
+3. If not cached: fetch demo URL -- call Parser -- transform -- store
 4. Return transformed data with ETag caching
 
 ## Current State
@@ -68,3 +68,19 @@ alembic revision --autogenerate -m "description"
 - Alembic for migrations
 - Never edit existing migrations
 - Test migrations up AND down
+
+## Contracts
+
+Two contracts involve the backend:
+
+| Contract | Spec file | Role |
+|----------|-----------|------|
+| Parser output | `private/specs/contracts/parser-output.md` | Consumer -- `ParsedMatchResponse` must match |
+| Backend API | `private/specs/contracts/backend-api.md` | Owner -- `TransformedMatchData` defines the spec |
+
+**When changing `ParsedMatchResponse`:** verify it still matches `parser-output.md` -- the parser
+owns that spec, so coordinate with `rust-parser` if a parser-side change is needed.
+
+**When changing `TransformedMatchData` or any type reachable from `MatchAnalysis`:** update
+`backend-api.md` first, then implement, then run `pytest tests/test_match_api.py` to confirm the
+schema tests still pass. The frontend's `domain/` types must match before the shard is complete.

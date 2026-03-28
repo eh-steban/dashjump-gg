@@ -103,3 +103,14 @@ npm run build
 3. API client handles caching (ETag)
 4. Data flows down through components via props/context
 5. Services handle data transformation for visualizations
+
+## Contracts
+
+The backend API contract is defined in `private/specs/contracts/backend-api.md`.
+
+**TypeScript interfaces in `frontend/src/domain/` must match `backend-api.md` exactly.**
+
+- Do not infer field types by reading Python files -- read the spec
+- When the backend adds a field, update the spec first, then update the TypeScript interface
+- Optional fields (`field?: type`) correspond to fields marked `no` in the Required column
+- Field names are snake_case throughout -- the backend does not camelCase its JSON keys

@@ -43,7 +43,7 @@ This keeps `tests.rs` a child module of `foo`, so private fields remain accessib
 ## Commands
 
 ```bash
-# Dev server (hot reload) — run from parser/
+# Dev server (hot reload) -- run from parser/
 cargo watch -i src/compressed-replays/ -i src/replays/ -x run
 
 # Tests
@@ -75,8 +75,8 @@ docker compose exec dashjump-parser cargo test -- --nocapture
 ## Domain References
 
 Before implementing new message listeners or entity subscriptions, check:
-- `private/specs/citadel-messages-reference.md` -- Citadel user message catalog (IDs 300–366): fields, product alignment, implementation notes
-- `private/specs/citadel-messages-supplemental.md` -- Low-alignment message namespaces (ECitadelGameEvents IDs 450–466); load only when investigating engine-level messaging
+- `private/specs/citadel-messages-reference.md` -- Citadel user message catalog (IDs 300-366): fields, product alignment, implementation notes
+- `private/specs/citadel-messages-supplemental.md` -- Low-alignment message namespaces (ECitadelGameEvents IDs 450-466); load only when investigating engine-level messaging
 - `private/specs/entity-fields-reference.md` -- Entity field semantics, gotchas, and deprecated fields (e.g. removed m_eZipLineLaneColor)
 - `private/specs/entity-fields-supplemental.md` -- Background-context entity fields not load-bearing for current features (m_nPlatformType, m_MoveType)
 - `private/specs/deadlock-api-haste-reference.md` -- haste parse lifecycle, Visitor trait, message subscription patterns, haste-inspector tool
@@ -114,3 +114,15 @@ curl -X POST http://localhost:9000/parse -H "Content-Type: application/json" \
 Parser produces (compressed before sending to backend):
 - Per-second positional data, player metadata
 - Damage events, objective events, creep wave snapshots
+
+## Contracts
+
+The parser output contract is defined in `private/specs/contracts/parser-output.md`.
+
+**Before serializing a new field or changing a type in `parser/src/domain/`:**
+1. Update `parser-output.md` first (add field, type, required/optional, notes)
+2. Then implement in Rust
+3. The backend's `ParsedMatchResponse` must be updated to match before the shard is complete
+
+Do not add fields to serde structs that are not in `parser-output.md`. Field names in serialized
+output are part of the contract -- rename only with a corresponding spec update.
