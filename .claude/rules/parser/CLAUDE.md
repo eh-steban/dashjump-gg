@@ -72,6 +72,24 @@ docker compose exec dashjump-parser cargo test creep_tracker
 docker compose exec dashjump-parser cargo test -- --nocapture
 ```
 
+### Running commands against a live container
+
+**Use `exec`, not `run`.** `docker compose run` spins up a fresh container from the image -- no source changes picked up, no incremental build, no warm cargo cache. `exec` enters the already-running container where the source bind-mount and cargo cache are live.
+
+```bash
+# Any cargo command -- tests, builds, probes, one-off binaries
+docker compose exec dashjump-parser cargo test
+docker compose exec dashjump-parser cargo run --bin <binary> -- <args>
+docker compose exec dashjump-parser cargo build
+```
+
+For **worktree containers**, prefix with `--project-directory`:
+```bash
+docker compose --project-directory ../dashjump-gg-<name> exec dashjump-parser cargo run --bin <binary> -- <args>
+```
+
+Only reach for `docker compose run` when the service container is not running (e.g., one-off migration, CI).
+
 ## Domain References
 
 Before implementing new message listeners or entity subscriptions, check:

@@ -169,6 +169,17 @@ scripts/wt start <name> --full
 docker compose --project-directory ../dashjump-gg-<name> exec dashjump-backend alembic upgrade head
 ```
 
+### Replay files in worktrees
+
+Worktree parser containers share the main repo's replay cache via a bind mount defined in `docker-compose.override.yaml`:
+
+```yaml
+volumes:
+  - ${MAIN_REPLAYS_DIR}:/parser/src/replays
+```
+
+`MAIN_REPLAYS_DIR` is written to the worktree's `.env` by `wt create` and points to `<repo-root>/parser/src/replays`. Any replay downloaded by the main stack is immediately available to all worktree parsers -- no copying needed. To use a replay in a probe or integration test, reference it by the path it has inside the container (`/parser/src/replays/<filename>`).
+
 ### Running tests
 
 After `scripts/wt start <name>`, the DB and backend are hot. Run tests directly -- no need for `docker exec`:

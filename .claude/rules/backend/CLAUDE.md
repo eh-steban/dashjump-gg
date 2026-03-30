@@ -17,7 +17,7 @@ See `.claude/rules/backend/backend-mental-model.md` for the full module structur
 
 ```bash
 # Run locally (from repo root)
-docker-compose up backend
+docker compose up backend
 
 # Run tests
 cd backend
@@ -25,10 +25,6 @@ pytest
 
 # Run with coverage
 pytest --cov=app --cov-report=term-missing
-
-# From repo root (without local Python toolchain)
-docker-compose run --rm dashjump-backend pytest
-docker-compose run --rm dashjump-backend pytest --cov=app --cov-report=term-missing
 
 # Linting
 ruff check app/
