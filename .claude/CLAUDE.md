@@ -32,6 +32,7 @@ dashjump-gg/
 - **API Advisement:** Avoid translation layers between internal/external schemas where possible
 - **DDD Architecture:** Domain layer is pure business logic, no framework dependencies
 - **Visualization Philosophy:** Tell stories with data, organize by game phase
+- **SOLID Principles:** Apply across all services -- each service CLAUDE.md has service-specific thresholds and DIP guidance
 
 ## Game Phases
 
