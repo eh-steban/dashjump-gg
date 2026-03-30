@@ -36,7 +36,9 @@ See `.claude/rules/parser/parser-mental-model.md` for the full module structure 
 
 ## Testing Conventions
 
-Unit tests live in a separate `tests.rs` file alongside the module they test, not inline in the source file. For a module `foo.rs`, create `foo/mod.rs` (implementation) and `foo/tests.rs` (tests), then declare `#[cfg(test)] mod tests;` at the bottom of `mod.rs`.
+Unit tests live in a separate `tests.rs` file alongside the module they test, not inline in the source file. Use the Rust 2018 `name.rs` style: keep the implementation in `foo.rs` and place tests in `foo/tests.rs`, then declare `#[cfg(test)] mod tests;` at the bottom of `foo.rs`.
+
+Do NOT use `foo/mod.rs` -- `foo.rs` and `foo/mod.rs` are equivalent to the compiler, but `foo.rs` is preferred.
 
 This keeps `tests.rs` a child module of `foo`, so private fields remain accessible without any API changes.
 
@@ -89,6 +91,13 @@ docker compose --project-directory ../dashjump-gg-<name> exec dashjump-parser ca
 ```
 
 Only reach for `docker compose run` when the service container is not running (e.g., one-off migration, CI).
+
+## Code Quality
+
+- Split modules at ~200-300 lines
+- Functions with >4-5 parameters are a refactor signal -- bundle into a struct
+- Pass dependencies via constructors or function parameters -- no global mutable state
+- Separate handlers (HTTP), demo operations (file I/O), and parsing logic (data extraction) -- each has one reason to change
 
 ## Domain References
 
