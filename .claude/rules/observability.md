@@ -1,3 +1,16 @@
+---
+paths:
+  - "backend/**/*.py"
+  - "backend/**/**/*.py"
+  - "backend/**/**/**/*.py"
+  - "backend/**/**/**/**/*.py"
+  - "frontend/src/**/*.ts"
+  - "frontend/src/**/*.tsx"
+  - "frontend/src/**/**/*.ts"
+  - "frontend/src/**/**/*.tsx"
+  - "parser/src/*.rs"
+  - "parser/src/**/*.rs"
+---
 # Observability Standards
 
 Cross-service logging, monitoring, and observability guidelines.
@@ -71,44 +84,9 @@ INFO - [corr:abc-123] [parse_demo] Processing match 456
 ## Service-Specific Guidelines
 
 See detailed logging guidelines:
-- `backend/observability.md` — Python logging setup
-- `frontend/observability.md` — Browser console logging
-- `parser/observability.md` — Rust tracing setup
-
-## Long-term Roadmap
-
-### Phase 2: Structured Logging (3-6 months)
-- JSON format for all services
-- Consistent field names: `timestamp`, `level`, `service`, `correlation_id`, `message`
-- Environment-based log level configuration (`LOG_LEVEL` env var)
-
-### Phase 3: Centralized Logging (6-12 months)
-- ELK stack (Elasticsearch, Logstash, Kibana) or similar
-- Log aggregation from all services
-- Searchable, filterable logs
-- Log retention policies enforced
-
-### Phase 4: Metrics & Tracing (12+ months)
-- Prometheus metrics (request latency, error rates, queue depths)
-- Distributed tracing (OpenTelemetry)
-- Error tracking service (Sentry)
-- Service health endpoints
-
-### Phase 5: Alerting & Dashboards
-- Grafana dashboards for key metrics
-- PagerDuty/Slack alerting on error thresholds
-- SLO/SLA monitoring
-- Capacity planning data
-
-## Data Retention Policy (Future)
-
-| Data Type | Retention | Rationale |
-|-----------|-----------|-----------|
-| Debug logs | 7 days | Short-term troubleshooting |
-| Info logs | 30 days | Operational review window |
-| Error logs | 90 days | Incident analysis period |
-| Metrics | 1 year | Trend analysis, capacity planning |
-| Traces | 7 days | Request debugging |
+- `backend/observability.md` -- Python logging setup
+- `frontend/observability.md` -- Browser console logging
+- `parser/observability.md` -- Rust tracing setup
 
 ## Performance Considerations
 

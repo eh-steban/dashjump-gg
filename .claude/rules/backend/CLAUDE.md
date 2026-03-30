@@ -65,6 +65,13 @@ alembic revision --autogenerate -m "description"
 - Never edit existing migrations
 - Test migrations up AND down
 
+## Code Quality
+
+- Split modules at ~200-300 lines
+- Use cases with >5-7 injected dependencies are a refactor signal
+- Functions with >4-5 parameters are a refactor signal -- bundle into a dataclass or schema
+- Inject ALL external dependencies (DB, APIs, services) via FastAPI `Depends` -- never instantiate concrete infrastructure inside a use case or domain service
+
 ## Contracts
 
 Two contracts involve the backend:

@@ -1,3 +1,9 @@
+---
+paths:
+  - "parser/src/domain/**"
+  - "backend/app/domain/**"
+  - "frontend/src/domain/**"
+---
 # Interservice Contract Standards
 
 Rules for all agents working on features that cross service boundaries.

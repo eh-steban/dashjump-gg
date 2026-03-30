@@ -74,11 +74,13 @@ This separation allows:
 ## Service Details
 
 See detailed documentation:
-- [containers.md](containers.md) — Dockerfile structure, multi-stage builds, optimization
-- [docker-compose.md](docker-compose.md) — Local orchestration, networking, volumes
-- [devcontainer.md](devcontainer.md) — Development environment setup
-- [ci-cd.md](ci-cd.md) — CI/CD pipelines, GitHub Actions workflows
-- [deployment.md](deployment.md) — Production deployment strategy (future)
+- [containers.md](containers.md) -- Dockerfile structure, multi-stage builds, optimization
+- [docker-compose.md](docker-compose.md) -- Local orchestration, networking, volumes
+- [devcontainer.md](devcontainer.md) -- Development environment setup
+- [ci-cd.md](ci-cd.md) -- CI/CD pipelines, GitHub Actions workflows
+- [deployment.md](deployment.md) -- Production deployment strategy (future)
+- [worktrees.md](worktrees.md) -- Parallel agent worktree workflow (`scripts/wt`)
+- [git.md](git.md) -- Commit message and branch naming conventions
 
 ## Quick Start
 

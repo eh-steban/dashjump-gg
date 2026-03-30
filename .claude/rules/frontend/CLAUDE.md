@@ -104,6 +104,13 @@ npm run build
 4. Data flows down through components via props/context
 5. Services handle data transformation for visualizations
 
+## Code Quality
+
+- Split components and hooks at ~200-300 lines
+- Components with >5-7 props are a refactor signal -- consider splitting or lifting state to context
+- No "kitchen sink" props: each component interface should cover exactly what it needs, nothing more
+- Pass data and callbacks down via props or context -- avoid importing services directly inside components
+
 ## Contracts
 
 The backend API contract is defined in `private/specs/contracts/backend-api.md`.
