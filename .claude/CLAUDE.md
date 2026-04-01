@@ -5,6 +5,7 @@ Esports analytics platform for Deadlock. Monorepo with three microservices.
 ## Writing Style
 
 - Use `--` (double-hyphen) instead of em-dashes (`—`) in all prose, docs, and commit messages. Em-dashes render as `<E2><80><94>` in git diffs and terminals.
+- Never hard-wrap prose lines in markdown files. Do not insert manual line breaks mid-sentence. Let lines be as long as needed -- editors and renderers handle wrapping. Hard-wrapped lines with continuation indents double-wrap in terminals and look broken.
 
 ## Quick Reference
 
