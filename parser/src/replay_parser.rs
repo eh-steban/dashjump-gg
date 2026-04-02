@@ -10,8 +10,8 @@ use haste::demostream::CmdHeader;
 use haste::entities::{DeltaHeader, Entity, ehandle_to_index, fkey_from_path};
 use haste::parser::{Context, Parser, Visitor};
 use haste::valveprotos::deadlock::{
-    CCitadelUserMessageDamage, CCitadelUserMsgPostMatchDetails, CMsgMatchMetaDataContentsPatched,
-    CitadelUserMessageIds,
+    CCitadelUserMessageDamage, CCitadelUserMsgHeroKilled, CCitadelUserMsgPostMatchDetails,
+    CMsgMatchMetaDataContentsPatched, CitadelUserMessageIds,
 };
 use prost::Message;
 use tracing::{error, info};
@@ -19,7 +19,7 @@ use tracing::{error, info};
 use crate::domain::{DamageRecord, Player, PlayerPosition};
 // Note: CreepSnapshot, LaneCreepData etc. are used via CreepTracker::get_output()
 use crate::entities::constants::*;
-use crate::tracking::{BossTracker, CreepTracker};
+use crate::tracking::{BossTracker, CreepTracker, SoulsTracker};
 use crate::utils::{get_entity_position, get_steam_id32};
 
 /// Thin error wrapper for the Visitor boundary.
@@ -47,6 +47,7 @@ struct MyVisitor {
     positions: Vec<Vec<PlayerPosition>>,
     boss_tracker: BossTracker,
     creep_tracker: CreepTracker,
+    souls_tracker: SoulsTracker,
     lane_data_updated: bool,
 }
 
@@ -65,6 +66,7 @@ impl Default for MyVisitor {
             positions: Vec::new(),
             boss_tracker,
             creep_tracker,
+            souls_tracker: SoulsTracker::new(),
             lane_data_updated: false,
         }
     }
@@ -83,6 +85,7 @@ impl MyVisitor {
             "positions": self.positions,
             "bosses": self.boss_tracker.get_output(),
             "lane_creep_data": lane_creep_data,
+            "souls": self.souls_tracker.get_output(),
         })
     }
 
@@ -315,10 +318,11 @@ impl Visitor for &mut MyVisitor {
 
         if next_window != this_window {
 
-            // Build per-second boss health and creep wave timelines using match-relative time
-            // (0-indexed from match second 0, matching the player positions array)
+            // Build per-second boss health, creep wave, and souls timelines using match-relative
+            // time (0-indexed from match second 0, matching the player positions array)
             let match_window = this_window - self.match_start_time_s.unwrap();
             self.boss_tracker.build_health_window(match_window);
+            self.souls_tracker.build_snapshot(match_window);
 
             // Collect player positions this tick for nearby-player computation in creep snapshots.
             // We scan all player pawns and convert custom_id to i32 for the tracker API.
@@ -497,6 +501,21 @@ impl Visitor for &mut MyVisitor {
             _ => {}
         }
 
+        // Track souls balance for player pawns (CREATE and UPDATE events carry entity state)
+        if match_started
+            && hash == CCITADELPLAYERPAWN_ENTITY
+            && !matches!(delta_header, DeltaHeader::DELETE)
+        {
+            let balance = entity
+                .get_value::<i32>(&GOLD_NET_WORTH_KEY)
+                .or_else(|| entity.get_value::<i32>(&GOLD_NET_WORTH_FLAT_KEY));
+            if let Some(balance) = balance {
+                let player_slot = self.get_custom_id(ctx, entity);
+                self.souls_tracker
+                    .handle_pawn_update(entity.index(), player_slot, balance);
+            }
+        }
+
         Ok(())
     }
 
@@ -563,6 +582,20 @@ impl Visitor for &mut MyVisitor {
                 error!("[parse_replay] Failed to push damage record: {:?}", error);
                 return Err(error.into());
             }
+        }
+
+        // Record hero kill events for souls bounty tracking
+        if packet_type == CitadelUserMessageIds::KEUserMsgHeroKilled as u32 {
+            let msg = CCitadelUserMsgHeroKilled::decode(data)?;
+            let match_sec = self
+                .match_start_time_s
+                .map(|start| self.total_match_time_s.saturating_sub(start))
+                .unwrap_or(0);
+            self.souls_tracker.handle_hero_killed(
+                msg.entindex_scorer.unwrap_or(-1),
+                msg.entindex_victim.unwrap_or(-1),
+                match_sec,
+            );
         }
 
         // Handle post-match details (damage matrix)

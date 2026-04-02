@@ -65,6 +65,10 @@ pub const CPROJECTILE_PRIEST_SLIDETRAP_ENTITY: u64 =
 // Field Keys
 // =============================================================================
 
+// Player pawn fields
+pub const GOLD_NET_WORTH_KEY: u64 = fkey_from_path(&["m_PlayerDataGlobal", "m_iGoldNetWorth"]);
+pub const GOLD_NET_WORTH_FLAT_KEY: u64 = fkey_from_path(&["m_iGoldNetWorth"]);
+
 // Player controller fields
 pub const OWNER_ENTITY_KEY: u64 = fkey_from_path(&["m_hOwnerEntity"]);
 pub const PLAYER_NAME_KEY: u64 = fkey_from_path(&["m_iszPlayerName"]);
