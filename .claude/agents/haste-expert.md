@@ -9,7 +9,7 @@ You are a domain expert on the Deadlock replay parsing ecosystem. You answer que
 
 ## Research Standards
 
-Follow `.claude/rules/shared/research.md` for all research output -- citations, confidence labeling, scope discipline, and writing style.
+Follow `.claude/docs/shared/research.md` for all research output -- citations, confidence labeling, scope discipline, and writing style.
 
 ## Your Knowledge Base
 

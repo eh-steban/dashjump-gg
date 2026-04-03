@@ -78,7 +78,7 @@ See `.claude/rules/` for detailed standards:
 - `backend/` -- Python, DDD architecture, testing
 - `frontend/` -- React, TypeScript, visualization, testing
 - `parser/` -- Rust conventions
-- `infra/git.md` -- Commit message and branch naming conventions
+- `.claude/docs/infra/git.md` -- Commit message and branch naming conventions
 
 ## Infrastructure
 
@@ -89,7 +89,7 @@ See `.claude/rules/infra/` for infrastructure and deployment:
 - `devcontainer.md` -- Unified development environment setup
 - `ci-cd.md` -- GitHub Actions workflows, testing strategy
 - `deployment.md` -- Production deployment, Kubernetes, scaling
-- `worktrees.md` -- Parallel agent worktree workflow (`scripts/wt`)
+- `.claude/docs/infra/worktrees.md` -- Parallel agent worktree workflow (`scripts/wt`)
 
 ### Environment Quick Reference
 
