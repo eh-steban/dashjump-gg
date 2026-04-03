@@ -13,4 +13,5 @@ services:
 
 volumes:
   cargo-cache-shared:
+    external: true
     name: dashjump-gg-cargo-cache

@@ -60,3 +60,4 @@ services:
 volumes:
   postgres-data:
   cargo-cache:
+    name: dashjump-gg-cargo-cache
