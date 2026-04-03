@@ -230,6 +230,21 @@ VSCode launch.json (future):
 }
 ```
 
+## Starting from Host (without VSCode)
+
+When you need to start and exec into the devcontainer manually -- e.g. to run nvim across worktrees -- both compose files must be specified so the devcontainer's dependencies on the main services resolve correctly.
+
+```bash
+# Start the devcontainer (and its dependencies)
+docker compose -f docker-compose.yaml -f .devcontainer/docker-compose.yml up -d devcontainer
+
+# Exec into it
+docker compose -f docker-compose.yaml -f .devcontainer/docker-compose.yml exec devcontainer bash
+
+# Then run nvim (installed at /usr/local/bin/nvim, config bind-mounted from host)
+nvim
+```
+
 ## Rebuilding the Devcontainer
 
 ### When to Rebuild
