@@ -167,13 +167,11 @@ The parser discards all frames before `match_start_time_s` before appending to p
 
 ---
 
-## total_match_time_s: Current Behavior and Known Rough Edge
+## match_duration_s
 
-The `total_match_time_s` field in the output JSON stores **replay-absolute time** (the raw replay clock second of the last frame processed), not the match duration in seconds. This is a known rough edge that will be addressed in the upcoming parser repo switch.
+The parser outputs `match_duration_s` -- the final value of the internal `current_match_second` counter after parsing completes. This is a match-relative value (0-indexed from match start). It should agree with `positions.len()` and `damage.len()`. If it doesn't, that's a signal to investigate the parser's tick-to-second boundary logic.
 
-**To get match duration:** Use `positions.len()` directly.
-
-**Approximation:** `total_match_time_s - match_start_time_s` approximates match duration in seconds.
+**This field is immutable after the parser sets it.** The backend passes it through to the frontend without manipulation.
 
 ---
 
@@ -349,6 +347,6 @@ let is_active = life_state == LIFE_ALIVE
 - boss.health_timeline[i] = match second i (aligned with positions)
 - lane_creep_data.creeps[entity_idx][i] = match second i (aligned with positions)
 - match_start_time_s is metadata -- not needed as a positions[] offset
-- Use positions.len() for match duration (not total_match_time_s -- see rough edge note above)
+- match_duration_s = final value of internal match-second counter (should equal positions.len())
 
 **Core rule:** positions[0] is match second 0. Index directly; no offset required.

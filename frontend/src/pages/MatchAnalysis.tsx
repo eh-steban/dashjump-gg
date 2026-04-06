@@ -76,7 +76,7 @@ const MatchAnalysis = () => {
   const playersData = parsedMatchData.players_data;
   // NOTE: Contains dmg/position data per player
   const perPlayerData = parsedMatchData.per_player_data;
-  const matchDuration = parsedMatchData.total_match_time_s;
+  const matchDuration = parsedMatchData.match_duration_s;
   const matchStartTime = parsedMatchData.match_start_time_s;
   const [heroData, setHeroData] = useState<Hero[]>([
     { id: 0, name: 'Default', images: {} },
@@ -285,7 +285,7 @@ const MatchAnalysis = () => {
           <MatchTimeViewer
             currentTick={currentTick}
             setCurrentTick={setCurrentTick}
-            total_match_time_s={matchDuration}
+            match_duration_s={matchDuration}
             match_start_time_s={matchStartTime}
             startRepeat={startRepeat}
             stopRepeat={stopRepeat}
@@ -314,7 +314,7 @@ const MatchAnalysis = () => {
                 <Minimap
                   currentSecond={currentTick}
                   setCurrentSecond={setCurrentTick}
-                  total_match_time_s={matchDuration}
+                  match_duration_s={matchDuration}
                   match_start_time_s={
                     matchAnalysis.parsed_match_data.match_start_time_s
                   }

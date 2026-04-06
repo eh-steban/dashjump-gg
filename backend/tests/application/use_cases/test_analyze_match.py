@@ -15,7 +15,7 @@ async def test_execute_returns_cached_data_when_available():
     mock_repo = AsyncMock()
 
     cached_data = TransformedMatchData(
-        total_match_time_s=0,
+        match_duration_s=0,
         match_start_time_s=0,
         players_data=[],
         per_player_data={},
@@ -47,7 +47,7 @@ async def test_execute_uses_local_demo_when_available():
     mock_repo.get_match_data.return_value = None  # Cache miss
     mock_parser.check_demo_available.return_value = (True, "12345_67890.dem")
     mock_parser.parse_demo.return_value = {
-        "total_match_time_s": 0,
+        "match_duration_s": 0,
         "match_start_time_s": 0,
         "players": [],
         "damage": [],
@@ -77,7 +77,7 @@ async def test_execute_falls_back_to_api_when_parser_check_fails():
     mock_parser.check_demo_available.side_effect = ParserServiceError("timeout")
     mock_deadlock.get_demo_url.return_value = {"demo_url": "http://example.com/demo.bz2"}
     mock_parser.parse_demo.return_value = {
-        "total_match_time_s": 0,
+        "match_duration_s": 0,
         "match_start_time_s": 0,
         "players": [],
         "damage": [],
@@ -105,7 +105,7 @@ async def test_execute_falls_back_when_local_parse_fails():
     mock_parser.parse_demo.side_effect = [
         ParserServiceError("parse failed"),  # Local parse fails
         {  # Remote parse succeeds
-            "total_match_time_s": 0,
+            "match_duration_s": 0,
             "match_start_time_s": 0,
             "players": [],
             "damage": [],

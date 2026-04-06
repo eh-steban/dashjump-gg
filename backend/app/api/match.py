@@ -140,11 +140,11 @@ async def get_match_analysis(
     response.headers["Cache-Control"] = "public, max-age=300"
 
     response_size = len(response_content.encode('utf-8'))
-    match_time_minutes = analysis.parsed_match_data.total_match_time_s / 60
+    match_time_minutes = analysis.parsed_match_data.match_duration_s / 60
     total_elapsed_ms = (time.perf_counter() - request_start) * 1000
     logger.info(
         f"Match analysis for match_id={match_id} served with ETag={etag}. "
-        f"Match time={match_time_minutes:.2f} minutes ({analysis.parsed_match_data.total_match_time_s}s). "
+        f"Match time={match_time_minutes:.2f} minutes ({analysis.parsed_match_data.match_duration_s}s). "
         f"Response size={response_size:,} bytes ({response_size / 1024:.2f} KB, {response_size / (1024 * 1024):.2f} MB). "
         f"Total latency={fmt_duration(total_elapsed_ms)}"
     )

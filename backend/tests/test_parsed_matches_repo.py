@@ -15,10 +15,10 @@ from app.domain.lane_pressure import LanePressureData
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _match_data_dict(total_match_time_s: int = 1800) -> dict:
+def _match_data_dict(match_duration_s: int = 1800) -> dict:
     """Minimal valid TransformedMatchData serialized to dict."""
     return TransformedMatchData(
-        total_match_time_s=total_match_time_s,
+        match_duration_s=match_duration_s,
         match_start_time_s=0,
         players_data=[],
         per_player_data={},
@@ -39,7 +39,7 @@ SCHEMA_VERSION = 1
 class TestCreateParsedMatch:
     async def test_insert_new_match_can_be_read_back(self, async_session):
         repo = ParsedMatchesRepo()
-        match_data = _match_data_dict(total_match_time_s=1800)
+        match_data = _match_data_dict(match_duration_s=1800)
 
         await repo.create_parsed_match(
             match_id=99001,
@@ -52,7 +52,7 @@ class TestCreateParsedMatch:
 
         result = await repo.get_match_data(99001, SCHEMA_VERSION, async_session)
         assert result is not None
-        assert result.total_match_time_s == 1800
+        assert result.match_duration_s == 1800
 
     # ---------------------------------------------------------------------------
     # PR-2: Upsert -- re-insert same match_id updates the stored row
@@ -66,7 +66,7 @@ class TestCreateParsedMatch:
             match_id=99002,
             schema_version=SCHEMA_VERSION,
             raw_payload_gzip=b"gzip-v1",
-            match_data=_match_data_dict(total_match_time_s=1800),
+            match_data=_match_data_dict(match_duration_s=1800),
             etag="etag-v1",
             session=async_session,
         )
@@ -76,14 +76,14 @@ class TestCreateParsedMatch:
             match_id=99002,
             schema_version=SCHEMA_VERSION,
             raw_payload_gzip=b"gzip-v2",
-            match_data=_match_data_dict(total_match_time_s=2400),
+            match_data=_match_data_dict(match_duration_s=2400),
             etag="etag-v2",
             session=async_session,
         )
 
         result = await repo.get_match_data(99002, SCHEMA_VERSION, async_session)
         assert result is not None
-        assert result.total_match_time_s == 2400, (
+        assert result.match_duration_s == 2400, (
             "Re-parse should overwrite stored data; got stale value"
         )
 

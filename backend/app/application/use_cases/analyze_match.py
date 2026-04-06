@@ -186,7 +186,7 @@ class AnalyzeMatchUseCase:
         )
 
         parsed_match = ParsedMatchResponse(
-            total_match_time_s=parsed_json_resp.get("total_match_time_s", 0),
+            match_duration_s=parsed_json_resp.get("match_duration_s", 0),
             match_start_time_s=parsed_json_resp.get("match_start_time_s", 0),
             damage=parsed_damage,
             players_data=players_list,

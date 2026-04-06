@@ -31,11 +31,18 @@ class PlayersDataService:
             for player in parsed_match.players_data
         }
 
-        # Aggregate in single timeline pass
-        # positions are game-relative (pre-game stripped by parser), so offset by match_start_time_s
-        match_duration = parsed_match.total_match_time_s - parsed_match.match_start_time_s
+        # positions[] and damage[] are pushed in lockstep by the parser -- one entry
+        # per match second, match-relative (pre-game stripped). match_duration_s is
+        # derived from the same counter, so all three should agree.
+        tick_count = len(parsed_match.positions)
 
-        for tick in range(match_duration):
+        if tick_count != parsed_match.match_duration_s:
+            logger.warning(
+                "positions length (%d) != match_duration_s (%d)",
+                tick_count, parsed_match.match_duration_s,
+            )
+
+        for tick in range(tick_count):
             # Aggregate positions for human players
             for player_position in parsed_match.positions[tick]:
                 custom_id = player_position.custom_id

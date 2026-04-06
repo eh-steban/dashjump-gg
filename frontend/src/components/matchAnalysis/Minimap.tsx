@@ -17,7 +17,7 @@ const MINIMAP_URL =
 const Minimap = ({
   currentSecond,
   setCurrentSecond,
-  total_match_time_s,
+  match_duration_s,
   scaledBossSnapshots,
   MINIMAP_SIZE,
   destroyedObjectivesSorted,
@@ -32,7 +32,7 @@ const Minimap = ({
 }: {
   currentSecond: number;
   setCurrentSecond: Dispatch<SetStateAction<number>>;
-  total_match_time_s: number;
+  match_duration_s: number;
   match_start_time_s: number;
   scaledBossSnapshots: ScaledBossSnapshot[];
   MINIMAP_SIZE: number;

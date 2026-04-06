@@ -37,7 +37,7 @@ class MatchDataService:
 
         # Assemble final structure
         return TransformedMatchData(
-            total_match_time_s=parsed_match.total_match_time_s,
+            match_duration_s=parsed_match.match_duration_s,
             match_start_time_s=parsed_match.match_start_time_s,
             players_data=parsed_match.players_data,
             per_player_data=per_player_data,

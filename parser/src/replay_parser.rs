@@ -37,7 +37,7 @@ impl From<prost::DecodeError> for ParseError {
 /// Main visitor that collects all match data during parsing
 #[derive(Debug)]
 struct MyVisitor {
-    total_match_time_s: u32,
+    current_match_second: u32,
     match_start_time_s: Option<u32>,
     damage_window: HashMap<u32, HashMap<u32, Vec<DamageRecord>>>,
     damage: Vec<HashMap<u32, HashMap<u32, Vec<DamageRecord>>>>,
@@ -55,7 +55,7 @@ impl Default for MyVisitor {
         let boss_tracker = BossTracker::new();
         let creep_tracker = CreepTracker::new(boss_tracker.lane_key());
         Self {
-            total_match_time_s: 0,
+            current_match_second: 0,
             match_start_time_s: None,
             damage_window: HashMap::new(),
             damage: Vec::new(),
@@ -76,7 +76,7 @@ impl MyVisitor {
         let lane_creep_data = self.creep_tracker.get_output();
 
         serde_json::json!({
-            "total_match_time_s": self.total_match_time_s,
+            "match_duration_s": self.current_match_second,
             "match_start_time_s": self.match_start_time_s,
             "damage": self.damage,
             "players": self.players,
@@ -318,6 +318,21 @@ impl Visitor for &mut MyVisitor {
             // Build per-second boss health and creep wave timelines using match-relative time
             // (0-indexed from match second 0, matching the player positions array)
             let match_window = this_window - self.match_start_time_s.unwrap();
+
+            // Pad skipped seconds. Tick-to-second rounding can cause match_window to jump
+            // (e.g. 100 → 102, skipping 101). Positions/damage/boss health must have an
+            // entry for every second so that array index == match second.
+            let expected_len = match_window as usize;
+            while self.positions.len() < expected_len {
+                // Repeat the last known positions frame (or empty if none yet)
+                let pad = self.positions.last().cloned().unwrap_or_default();
+                self.positions.push(pad);
+                // Empty damage for the skipped second
+                self.damage.push(HashMap::new());
+                // Carry forward boss health for the skipped second
+                self.boss_tracker.build_health_window(self.positions.len() as u32 - 1);
+            }
+
             self.boss_tracker.build_health_window(match_window);
 
             // Collect player positions this tick for nearby-player computation in creep snapshots.
@@ -361,11 +376,7 @@ impl Visitor for &mut MyVisitor {
             self.damage.push(std::mem::take(&mut self.damage_window));
             self.positions
                 .push(std::mem::take(&mut self.positions_window));
-            // Track match-relative duration (0-indexed from match start).
-            // `match_window` is already the correct match-relative second; using
-            // `this_window` here would produce the absolute recording time, which
-            // is `match_start_time_s` seconds larger than the match duration.
-            self.total_match_time_s = match_window;
+            self.current_match_second = match_window;
         }
 
         Ok(())
@@ -392,7 +403,7 @@ impl Visitor for &mut MyVisitor {
             DeltaHeader::CREATE => {
                 if self.boss_tracker.is_boss_entity(hash) {
                     let custom_id = self.get_custom_id(ctx, entity);
-                    let match_time_s = self.total_match_time_s.saturating_sub(self.match_start_time_s.unwrap_or(0));
+                    let match_time_s = self.current_match_second;
                     self.boss_tracker.handle_boss_create(
                         entity,
                         custom_id,
@@ -424,9 +435,7 @@ impl Visitor for &mut MyVisitor {
                             );
                             return Ok(());
                         };
-                        let match_time_s = self.total_match_time_s.saturating_sub(
-                            self.match_start_time_s.unwrap_or(0),
-                        );
+                        let match_time_s = self.current_match_second;
                         self.creep_tracker.handle_creep_create(
                             entity.index(),
                             lane,
@@ -442,7 +451,7 @@ impl Visitor for &mut MyVisitor {
                 }
             }
             DeltaHeader::DELETE => {
-                let match_time_s = self.total_match_time_s.saturating_sub(self.match_start_time_s.unwrap_or(0));
+                let match_time_s = self.current_match_second;
                 self.boss_tracker
                     .handle_boss_delete(entity, match_time_s);
                 if CreepTracker::is_creep_entity(hash) {
@@ -478,9 +487,7 @@ impl Visitor for &mut MyVisitor {
                         .get_value::<u8>(&LIFE_STATE_KEY)
                         .unwrap_or(LIFE_ALIVE);
                     let health: i32 = entity.get_value(&HEALTH_KEY).unwrap_or(0);
-                    let match_time_s = self.total_match_time_s.saturating_sub(
-                        self.match_start_time_s.unwrap_or(0),
-                    );
+                    let match_time_s = self.current_match_second;
                     self.creep_tracker.handle_creep_update(
                         entity.index(),
                         lane,
@@ -529,7 +536,7 @@ impl Visitor for &mut MyVisitor {
             // Check if victim is a boss and record health sample
             let victim_hash = victim.unwrap().serializer().serializer_name.hash;
             if self.boss_tracker.is_boss_entity(victim_hash) {
-                let match_time_s = self.total_match_time_s.saturating_sub(self.match_start_time_s.unwrap_or(0));
+                let match_time_s = self.current_match_second;
                 self.boss_tracker.record_boss_damage(
                     msg.entindex_victim(),
                     ctx,
@@ -622,9 +629,9 @@ pub async fn parse_replay(replay_full_path: &str) -> Result<serde_json::Value> {
     })?;
 
     info!(
-        "[parse_replay] Parse complete. match_start_time_s={:?}, total_match_time_s={}, players={}, position_frames={}",
+        "[parse_replay] Parse complete. match_start_time_s={:?}, match_duration_s={}, players={}, position_frames={}",
         visitor.match_start_time_s,
-        visitor.total_match_time_s,
+        visitor.current_match_second,
         visitor.players.len(),
         visitor.positions.len()
     );

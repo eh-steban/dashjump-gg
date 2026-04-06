@@ -14,7 +14,7 @@ from app.domain.player import (
 )
 
 class ParsedMatchResponse(SQLModel):
-    total_match_time_s: int
+    match_duration_s: int
     match_start_time_s: int
     # Shape of damage data from parser:
     # Vec<HashMap<i32, HashMap<i32, Vec<DamageRecord>>>> (tick -> attacker -> victim -> Vec<DamageRecord>)
@@ -31,7 +31,7 @@ class ParsedMatchResponse(SQLModel):
 # TODO: Created a temporary ParsedPlayer class to make this happy
 # Might change this later
 class TransformedMatchData(SQLModel):
-    total_match_time_s: int
+    match_duration_s: int
     match_start_time_s: int
     players_data: list[PlayerData]
     # players: list[PlayerInfo]

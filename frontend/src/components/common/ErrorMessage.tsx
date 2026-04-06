@@ -140,8 +140,12 @@ function getUserFriendlyMessage(message: string): string {
     return message; // Not found messages are usually already clear
   }
 
-  if (message.includes('Network') || message.includes('Failed to fetch')) {
+  if (message.includes('Network') || message === 'Failed to fetch') {
     return 'Unable to connect to the server. Please check your internet connection and try again.';
+  }
+
+  if (message.includes('(500)')) {
+    return 'Something went wrong on the server. Please try again later.';
   }
 
   // Default: return original message for unrecognized errors

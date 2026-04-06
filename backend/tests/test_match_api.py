@@ -32,7 +32,7 @@ from app.application.use_cases.analyze_match import AnalyzeMatchUseCase
 
 def _make_transformed_match_data() -> TransformedMatchData:
     return TransformedMatchData(
-        total_match_time_s=1800,
+        match_duration_s=1800,
         match_start_time_s=0,
         players_data=[],
         per_player_data={},
@@ -98,7 +98,7 @@ class TestMatchAnalysisSchema:
 
     def test_transformed_match_data_fields(self):
         data = _make_transformed_match_data()
-        assert hasattr(data, "total_match_time_s")
+        assert hasattr(data, "match_duration_s")
         assert hasattr(data, "match_start_time_s")
         assert hasattr(data, "players_data")
         assert hasattr(data, "per_player_data")
@@ -137,7 +137,7 @@ class TestMatchAnalysisSchema:
         assert "match_metadata" in d
         assert "parsed_match_data" in d
         pd = d["parsed_match_data"]
-        assert "total_match_time_s" in pd
+        assert "match_duration_s" in pd
         assert "players_data" in pd
         assert "per_player_data" in pd
         assert "bosses" in pd

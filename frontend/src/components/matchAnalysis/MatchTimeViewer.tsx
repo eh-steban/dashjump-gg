@@ -4,7 +4,7 @@ import { formatSecondstoMMSS } from '../../utils/time';
 interface MatchTimeViewerProps {
   currentTick: number;
   setCurrentTick: (time: number | ((t: number) => number)) => void;
-  total_match_time_s: number;
+  match_duration_s: number;
   match_start_time_s: number;
   startRepeat: (direction: 'back' | 'forward') => void;
   stopRepeat: () => void;
@@ -13,7 +13,7 @@ interface MatchTimeViewerProps {
 const MatchTimeViewer: React.FC<MatchTimeViewerProps> = ({
   currentTick,
   setCurrentTick,
-  total_match_time_s,
+  match_duration_s,
   match_start_time_s,
   startRepeat,
   stopRepeat,
@@ -21,7 +21,7 @@ const MatchTimeViewer: React.FC<MatchTimeViewerProps> = ({
   // Display times offset by match_start_time_s so the clock matches the
   // in-game timer (e.g. positions[0] shows as "0:38" not "0:00").
   const currentTime = formatSecondstoMMSS(currentTick + match_start_time_s);
-  const totalTime = formatSecondstoMMSS(total_match_time_s + match_start_time_s);
+  const totalTime = formatSecondstoMMSS(match_duration_s + match_start_time_s);
 
   return (
     <div className='flex w-full justify-center'>
@@ -53,16 +53,16 @@ const MatchTimeViewer: React.FC<MatchTimeViewerProps> = ({
 
           <button
             onClick={() =>
-              setCurrentTick((t) => Math.min(total_match_time_s, t))
+              setCurrentTick((t) => Math.min(match_duration_s, t))
             }
             onMouseDown={() => startRepeat('forward')}
             onMouseUp={stopRepeat}
             onMouseLeave={stopRepeat}
             onTouchStart={() => startRepeat('forward')}
             onTouchEnd={stopRepeat}
-            disabled={currentTick >= total_match_time_s}
+            disabled={currentTick >= match_duration_s}
             className={`rounded border px-3 py-1 text-lg transition-colors ${
-              currentTick >= total_match_time_s ?
+              currentTick >= match_duration_s ?
                 'cursor-not-allowed border-gray-300 bg-gray-200 text-gray-400'
               : 'cursor-pointer border-gray-300 bg-white text-gray-700 shadow-sm hover:bg-gray-100'
             }`}
@@ -74,7 +74,7 @@ const MatchTimeViewer: React.FC<MatchTimeViewerProps> = ({
           <input
             type='range'
             min={0}
-            max={total_match_time_s}
+            max={match_duration_s}
             value={currentTick}
             onChange={(e) => setCurrentTick(Number(e.target.value))}
             className='h-2 flex-1 cursor-pointer appearance-none rounded-lg bg-gray-200 accent-blue-600'

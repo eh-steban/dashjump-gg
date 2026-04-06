@@ -14,7 +14,7 @@ pub struct Player {
 }
 
 /// Per-tick player/entity position
-#[derive(Default, Debug, Serialize)]
+#[derive(Default, Debug, Clone, Serialize)]
 pub struct PlayerPosition {
     pub custom_id: String,
     pub x: f32,

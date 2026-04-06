@@ -6,7 +6,7 @@ import { LanePressureData } from "./lanePressure";
 
 // Parsed match data (aggregated by player, per backend ParsedMatchData)
 export interface ParsedMatchData {
-  total_match_time_s: number;
+  match_duration_s: number;
   match_start_time_s: number;
   players_data: ParsedPlayer[];
   per_player_data: Record<string, PlayerMatchData>; // key = player_id
@@ -75,7 +75,7 @@ export const defaultMatchAnalysis: MatchAnalysisResponse = {
     },
   },
   parsed_match_data: {
-    total_match_time_s: 0,
+    match_duration_s: 0,
     match_start_time_s: 0,
     players_data: [],
     per_player_data: {},
