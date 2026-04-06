@@ -30,6 +30,11 @@ services:
     depends_on:
       - dashjump-db
 
+    # Host-level API keys (file managed outside version control)
+    env_file:
+      - path: ${HOME}/.config/ai_keys.env
+        required: true
+
     # Environment variables for accessing other services
     environment:
       - DATABASE_URL=postgresql+psycopg://deadlock:deadlockpass@dashjump-db:5432/deadlock_db
