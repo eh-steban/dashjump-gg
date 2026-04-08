@@ -484,8 +484,7 @@ impl Visitor for &mut MyVisitor {
                     let max_health: i32 = entity
                         .get_value::<i32>(&MAX_HEALTH_KEY)
                         .unwrap_or(500);
-                    let match_time_s = self.total_match_time_s
-                        .saturating_sub(self.match_start_time_s.unwrap_or(0));
+                    let match_time_s = self.current_match_second;
                     self.sinner_tracker.handle_sinner_create(
                         entity.index(),
                         position[0],
@@ -548,8 +547,7 @@ impl Visitor for &mut MyVisitor {
                 }
                 if match_started && hash == CNPC_NEUTRAL_SINNERSSACRIFICE_ENTITY {
                     if let Some(health) = entity.get_value::<i32>(&HEALTH_KEY) {
-                        let match_time_s = self.total_match_time_s
-                            .saturating_sub(self.match_start_time_s.unwrap_or(0));
+                        let match_time_s = self.current_match_second;
                         if let Some(attacker_entity_index) = self.sinner_tracker
                             .handle_sinner_update(entity.index(), health, match_time_s)
                         {
