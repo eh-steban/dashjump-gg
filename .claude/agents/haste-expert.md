@@ -59,6 +59,8 @@ When a product feature needs data that isn't clearly documented:
 
 **Entity subscription:** Implement `Visitor::on_entity`, match `entity.serializer_name_heq(hash)` where hash = `fxhash::hash_bytes(b"EntityClassName")`.
 
+**Recovering entity class names and per-class fields:** The `deadlock-api/haste` fork strips `preserve-metadata`, so `Symbol` only stores a `u64` hash -- class names are NOT recoverable via the runtime entity API. Use `private/engineering/tools/probe_all_entity_classes.rs` (proprietary, lives in the private submodule). It decodes `CDemoSendTables` -> `CsvcMsgFlattenedSerializer` via prost and dumps every serializer class plus optional per-class field lists. This is the authoritative, dem-backed source when you need to answer "does class X exist?" or "does field Y live on class X?" It is NOT part of the parser's normal build -- copy to `parser/src/bin/` to run, then delete the copy. Run instructions are in the file header. See `.claude/rules/parser/parser-mental-model.md` "Entity Field Lookup Tools" for the full tool stack. Citation label in specs: `[probe-classes]`.
+
 **Important renames (old list → current):**
 - `CCitadelUserMsg_StaminaDrained` → `CCitadelUserMsg_StaminaConsumed` (ID 337)
 - `CCitadelUserMessageCurrencyChanged` → `CCitadelUserMessage_CurrencyChanged` (ID 345)

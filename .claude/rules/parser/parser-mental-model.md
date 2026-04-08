@@ -250,13 +250,17 @@ Deadlock protobufs (`valveprotos-rs`) only cover network messages — game event
 
 ### The Correct Lookup Path
 
-1. **`uniquetypes` tool** (`haste` repo at `tools/uniquetypes/src/main.rs`) — Run against a `.dem` file to extract all unique type name identifiers from the SendTables. This reveals what Rust type backs a given field name (e.g., `ELifeState`, `ENPCState`).
+1. **`probe_all_entity_classes`** (`private/engineering/tools/probe_all_entity_classes.rs`) -- In-house probe that decodes `CDemoSendTables` -> `CsvcMsgFlattenedSerializer` via prost and enumerates every serializer class name and its fields in a given `.dem`. Authoritative, dem-backed source for "does class X exist?" and "does field Y live on class X?" The `deadlock-api/haste` fork strips `preserve-metadata`, so this direct-decode path is the only way to recover class names. Lives in the private submodule (proprietary scraped reference data); NOT part of the parser's normal build. Copy into `parser/src/bin/` temporarily to run, then delete the copy -- run instructions are in the file header. Citation label in specs: `[probe-classes]`. Used by `private/specs/entity-types-reference.md` and `private/specs/entity-fields-reference.md`.
 
-2. **`haste-inspector`** (repo: `blukai/haste-inspector`) — Interactive browser for entity fields in a live demo. Browse `CNPC_Trooper` directly to see field names, types, and current values.
+1a. **`probe_entity_classes`** (`private/engineering/tools/probe_entity_classes.rs`) -- Runtime companion to tool #1. Resolves a hand-picked set of entity **indices** to their class names, with first-observation tick, match second, delta kind, and initial `m_iHealth`. Answers "what class is entity #N?" when investigating specific indices from boss_tracker or creep_tracker output. **Currently broken against `deadlock-api/haste`** because it reads `entity.serializer().serializer_name.str`, which no longer exists after `preserve-metadata` was stripped. Port path (documented in the file header): build a hash->name map up front from `CDemoSendTables` and look up class names by hash at runtime. Same copy-to-run-then-delete workflow as tool #1.
 
-3. **`dezlock-dump`** — Runtime schema extractor that injects into a running Deadlock process and outputs `_all-enums.hpp` with all scoped enums and their integer values. Requires the game running; not usable in devcontainer.
+2. **`uniquetypes` tool** (`haste` repo at `tools/uniquetypes/src/main.rs`) -- Run against a `.dem` file to extract all unique type name identifiers from the SendTables. Complements `probe_all_entity_classes` when you need the full type-name universe (including generic template parameters) rather than the per-class field breakdown.
 
-4. **`SteamDatabase/GameTracking-Deadlock`** — Community-maintained game file tracking on GitHub. Does NOT contain schema dumps; mainly tracks `.vpk` asset changes. Do not rely on this for enum values.
+3. **`haste-inspector`** (repo: `blukai/haste-inspector`) -- Interactive browser for entity fields in a live demo. Browse `CNPC_Trooper` directly to see field names, types, and current values. Best when you need to observe runtime values (e.g., enum integers actually in use) that the static probe cannot see.
+
+4. **`dezlock-dump`** -- Runtime schema extractor that injects into a running Deadlock process and outputs `_all-enums.hpp` with all scoped enums and their integer values. Requires the game running; not usable in devcontainer.
+
+5. **`SteamDatabase/GameTracking-Deadlock`** -- Community-maintained game file tracking on GitHub. Does NOT contain server schema dumps; mainly tracks `.vpk` asset changes. Do not rely on this for enum values or entity class names.
 
 ### Reference Pattern
 
