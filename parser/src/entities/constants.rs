@@ -118,6 +118,8 @@ pub const MOVETYPE_STEP: u8 = 9;
 
 // Health field -- CBaseEntity.m_iHealth (int32)
 pub const HEALTH_KEY: u64 = fkey_from_path(&["m_iHealth"]);
+// Max health field -- CBaseEntity.m_iMaxHealth (int32)
+pub const MAX_HEALTH_KEY: u64 = fkey_from_path(&["m_iMaxHealth"]);
 /// Health sentinel for CNPC_Trooper cage entities (zipline-carrier sprites, not fighting units).
 /// Cage entities have m_iHealth == 1; real lane creeps have m_iHealth > 1.
 pub const CAGE_ENTITY_HEALTH: i32 = 1;

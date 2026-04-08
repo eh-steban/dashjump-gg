@@ -14,12 +14,13 @@ use haste::valveprotos::deadlock::{
     CitadelUserMessageIds,
 };
 use prost::Message;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::domain::{DamageRecord, Player, PlayerPosition};
 // Note: CreepSnapshot, LaneCreepData etc. are used via CreepTracker::get_output()
 use crate::entities::constants::*;
-use crate::tracking::{BossTracker, CreepTracker};
+use crate::entities::constants::MAX_HEALTH_KEY;
+use crate::tracking::{BossTracker, CreepTracker, SinnerTracker};
 use crate::utils::{get_entity_position, get_steam_id32};
 
 /// Thin error wrapper for the Visitor boundary.
@@ -47,6 +48,7 @@ struct MyVisitor {
     positions: Vec<Vec<PlayerPosition>>,
     boss_tracker: BossTracker,
     creep_tracker: CreepTracker,
+    sinner_tracker: SinnerTracker,
     lane_data_updated: bool,
 }
 
@@ -54,6 +56,7 @@ impl Default for MyVisitor {
     fn default() -> Self {
         let boss_tracker = BossTracker::new();
         let creep_tracker = CreepTracker::new(boss_tracker.lane_key());
+        let sinner_tracker = SinnerTracker::new();
         Self {
             current_match_second: 0,
             match_start_time_s: None,
@@ -65,6 +68,7 @@ impl Default for MyVisitor {
             positions: Vec::new(),
             boss_tracker,
             creep_tracker,
+            sinner_tracker,
             lane_data_updated: false,
         }
     }
@@ -83,6 +87,7 @@ impl MyVisitor {
             "positions": self.positions,
             "bosses": self.boss_tracker.get_output(),
             "lane_creep_data": lane_creep_data,
+            "sinners": self.sinner_tracker.get_output(),
         })
     }
 
@@ -145,10 +150,16 @@ impl MyVisitor {
                 | CNPC_BARRACKBOSS_ENTITY
                 | CNPC_BOSS_TIER2_ENTITY
                 | CNPC_BOSS_TIER3_ENTITY
-                | CNPC_NEUTRAL_SINNERSSACRIFICE_ENTITY
                 | CNPC_BASE_DEFENSE_SENTRY_ENTITY
                 | CNPC_SHIELDEDSENTRY_ENTITY
         )
+    }
+
+    /// Check if entity needs a one-time position snapshot at CREATE.
+    /// Used for stationary objectives that do not require per-second tracking.
+    fn should_track_snapshot(&self, entity: &Entity) -> bool {
+        let hash = entity.serializer().serializer_name.hash;
+        matches!(hash, CNPC_NEUTRAL_SINNERSSACRIFICE_ENTITY)
     }
 
     /// Check if entity is an NPC (not a player pawn)
@@ -294,6 +305,19 @@ impl MyVisitor {
 
         Ok(())
     }
+}
+
+/// Resolve a player pawn entity index to a lobby player slot.
+/// Walks the pawn -> controller -> m_unLobbyPlayerSlot chain.
+/// Returns `None` if any step of the chain is absent.
+fn resolve_pawn_to_slot(pawn_index: i32, ctx: &Context) -> Option<u32> {
+    let entities = ctx.entities()?;
+    let pawn = entities.get(&pawn_index)?;
+    let owner_handle: u32 = pawn.get_value(&OWNER_ENTITY_KEY).unwrap_or(0);
+    let controller_index = ehandle_to_index(owner_handle) as i32;
+    let controller = entities.get(&controller_index)?;
+    let slot: u32 = controller.get_value(&LOBBY_PLAYER_SLOT_KEY)?;
+    Some(slot)
 }
 
 impl Visitor for &mut MyVisitor {
@@ -449,6 +473,28 @@ impl Visitor for &mut MyVisitor {
                         );
                     }
                 }
+                if match_started && self.should_track_snapshot(entity) {
+                    let Some(position) = get_entity_position(entity) else {
+                        error!(
+                            "[parse_replay] sinner entity has no position on CREATE (bug): Index={}",
+                            entity.index()
+                        );
+                        return Ok(());
+                    };
+                    let max_health: i32 = entity
+                        .get_value::<i32>(&MAX_HEALTH_KEY)
+                        .unwrap_or(500);
+                    let match_time_s = self.total_match_time_s
+                        .saturating_sub(self.match_start_time_s.unwrap_or(0));
+                    self.sinner_tracker.handle_sinner_create(
+                        entity.index(),
+                        position[0],
+                        position[1],
+                        position[2],
+                        max_health,
+                        match_time_s,
+                    );
+                }
             }
             DeltaHeader::DELETE => {
                 let match_time_s = self.current_match_second;
@@ -500,6 +546,55 @@ impl Visitor for &mut MyVisitor {
                         health,
                     );
                 }
+                if match_started && hash == CNPC_NEUTRAL_SINNERSSACRIFICE_ENTITY {
+                    if let Some(health) = entity.get_value::<i32>(&HEALTH_KEY) {
+                        let match_time_s = self.total_match_time_s
+                            .saturating_sub(self.match_start_time_s.unwrap_or(0));
+                        if let Some(attacker_entity_index) = self.sinner_tracker
+                            .handle_sinner_update(entity.index(), health, match_time_s)
+                        {
+                            // Death detected -- resolve attacker entity index to lobby player slot.
+                            // A6.5 defensive fallback: if the attacker is not a player pawn,
+                            // attempt m_hOwnerEntity resolution (handles potential Lil Helper case).
+                            let attacker_index = attacker_entity_index;
+                            let attacker_entity = ctx
+                                .entities()
+                                .and_then(|e| e.get(&attacker_index));
+                            let attacker_hash = attacker_entity
+                                .map(|e| e.serializer().serializer_name.hash);
+
+                            let killer_slot = match attacker_hash {
+                                Some(h) if h == CCITADELPLAYERPAWN_ENTITY => {
+                                    // Normal path: attacker is a player pawn
+                                    resolve_pawn_to_slot(attacker_index, ctx)
+                                }
+                                Some(_) => {
+                                    // Defensive path: attacker is an NPC (e.g., possible Lil Helper)
+                                    // Try m_hOwnerEntity to find the owning player pawn
+                                    let owner_slot = attacker_entity
+                                        .and_then(|e| e.get_value::<u32>(&OWNER_ENTITY_KEY))
+                                        .map(|h| ehandle_to_index(h) as i32)
+                                        .and_then(|owner_idx| resolve_pawn_to_slot(owner_idx, ctx));
+                                    if owner_slot.is_none() {
+                                        warn!(
+                                            "[parse_replay] sinner death: non-pawn attacker index {} owner chain failed",
+                                            attacker_index
+                                        );
+                                    }
+                                    owner_slot
+                                }
+                                None => None,
+                            };
+
+                            if let Some(slot) = killer_slot {
+                                self.sinner_tracker.record_sinner_death_killer(
+                                    entity.index(),
+                                    slot,
+                                );
+                            }
+                        }
+                    }
+                }
             }
             _ => {}
         }
@@ -542,6 +637,39 @@ impl Visitor for &mut MyVisitor {
                     ctx,
                     match_time_s,
                 )?;
+            }
+
+            // Player or Lil Helper hits sinner -- track last attacker for kill attribution
+            if self.sinner_tracker.is_tracked_sinner(msg.entindex_victim()) {
+                self.sinner_tracker.record_damage(
+                    msg.entindex_victim(),
+                    msg.entindex_attacker(),
+                );
+            }
+
+            // Sinner retaliates -- accumulate retaliation damage per player slot.
+            // Confirmed (lil-helper-sinner-interaction.md spike, replay 55841493):
+            // retaliation always targets a CCitadelPlayerPawn directly.
+            if self.sinner_tracker.is_tracked_sinner(msg.entindex_attacker()) {
+                if let Some(entities) = ctx.entities() {
+                    if let Some(victim_pawn) = entities.get(&msg.entindex_victim()) {
+                        if victim_pawn.serializer_name_heq(CCITADELPLAYERPAWN_ENTITY) {
+                            let owner_handle: u32 = victim_pawn
+                                .get_value(&OWNER_ENTITY_KEY)
+                                .unwrap_or(0);
+                            let controller_index = ehandle_to_index(owner_handle) as i32;
+                            if let Some(controller) = entities.get(&controller_index) {
+                                if let Some(slot) = controller.get_value::<u32>(&LOBBY_PLAYER_SLOT_KEY) {
+                                    self.sinner_tracker.record_retaliation(
+                                        msg.entindex_attacker(),
+                                        slot,
+                                        msg.damage(),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             let record = DamageRecord {
