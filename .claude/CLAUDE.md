@@ -29,11 +29,24 @@ dashjump-gg/
 
 ## Key Principles
 
-- **Game Alignment:** Valve's Deadlock is source of truth for domain terminology
+- **Game Alignment:** Valve's Deadlock is source of truth for domain terminology. See **Terminology: Match vs Game** below.
 - **API Advisement:** Avoid translation layers between internal/external schemas where possible
 - **DDD Architecture:** Domain layer is pure business logic, no framework dependencies
 - **Visualization Philosophy:** Tell stories with data, organize by game phase
 - **SOLID Principles:** Apply across all services -- each service CLAUDE.md has service-specific thresholds and DIP guidance
+
+## Terminology: Match vs Game
+
+Deadlock uses **match** for a single play session ("Find Match", "Match History"). We follow that convention everywhere -- code, docs, field names, UI copy.
+
+| Term | Meaning | Example |
+|------|---------|---------|
+| **match** | A single Deadlock play session | `matchtime_s`, `match_id`, "Match Analysis" |
+| **game** | A tournament unit within a series | "Best of 3 -- Game 1", "won 2-1" |
+
+- Field names use `matchtime_s`, NOT `gametime_s` (even though the Valve proto uses `gametime`)
+- Prose: "this match" not "this game" when referring to replay data
+- The Valve proto field `gametime` is an upstream name we don't control -- map it to `matchtime_s` at our domain boundary
 
 ## Game Phases
 
