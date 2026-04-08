@@ -14,7 +14,7 @@ use haste::valveprotos::deadlock::{
     CitadelUserMessageIds,
 };
 use prost::Message;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::domain::{DamageRecord, Player, PlayerPosition};
 // Note: CreepSnapshot, LaneCreepData etc. are used via CreepTracker::get_output()
@@ -708,8 +708,8 @@ impl Visitor for &mut MyVisitor {
                 if let Ok(meta) = CMsgMatchMetaDataContentsPatched::decode(&mut cursor) {
                     if let Some(match_info) = meta.match_info {
                         if let Some(damage_matrix) = match_info.damage_matrix {
-                            println!(
-                                "PostMatch damage_matrix: dealers={} samples={}",
+                            debug!(
+                                "[parse_replay] PostMatch damage_matrix: dealers={} samples={}",
                                 damage_matrix.damage_dealers.len(),
                                 damage_matrix.sample_time_s.len()
                             );
