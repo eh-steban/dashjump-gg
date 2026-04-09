@@ -3,6 +3,7 @@ import { ParsedPlayer, PlayerMatchData } from "./player";
 import { BossData } from "./boss";
 import { LaneCreepData } from "./creep";
 import { LanePressureData } from "./lanePressure";
+import { SinnerSnapshot } from "./sinner";
 
 // Parsed match data (aggregated by player, per backend ParsedMatchData)
 export interface ParsedMatchData {
@@ -13,6 +14,7 @@ export interface ParsedMatchData {
   bosses: BossData;
   lane_creep_data: LaneCreepData;
   lane_pressure: LanePressureData;
+  sinners: SinnerSnapshot[];
 }
 
 // Full match analysis response (backend MatchAnalysis)
@@ -90,5 +92,6 @@ export const defaultMatchAnalysis: MatchAnalysisResponse = {
     lane_pressure: {
       pressure: {},
     },
+    sinners: [],
   },
 };

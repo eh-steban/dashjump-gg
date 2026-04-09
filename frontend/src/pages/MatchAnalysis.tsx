@@ -12,6 +12,7 @@ import { regions } from '../data/regions';
 import { DestroyedObjective } from '../domain/destroyedObjective';
 import { Hero, PlayerData, ScaledPlayerCoord } from '../domain/player';
 import { ScaledBossSnapshot } from '../domain/boss';
+import { ScaledSinnerSnapshot } from '../domain/sinner';
 import { useMatchAnalysis } from '../hooks/UseMatchAnalysis';
 import PrintHeroImageData from '../components/matchAnalysis/PrintHeroImageData';
 import { formatSecondstoMMSS } from '../utils/time';
@@ -72,6 +73,7 @@ const MatchAnalysis = () => {
   const matchMetadata = matchAnalysis.match_metadata;
   const parsedMatchData = matchAnalysis.parsed_match_data;
   const bossSnapshots = parsedMatchData.bosses.snapshots;
+  const sinnerSnapshots = parsedMatchData.sinners;
   // NOTE: Contains player info
   const playersData = parsedMatchData.players_data;
   // NOTE: Contains dmg/position data per player
@@ -167,6 +169,15 @@ const MatchAnalysis = () => {
         ...worldToMinimapPixels(snapshot.x, snapshot.y),
       })),
     [bossSnapshots]
+  );
+
+  const scaledSinnerSnapshots: ScaledSinnerSnapshot[] = useMemo(
+    () =>
+      sinnerSnapshots.map((snapshot) => ({
+        ...snapshot,
+        ...worldToMinimapPixels(snapshot.x, snapshot.y),
+      })),
+    [sinnerSnapshots]
   );
 
   // Diagnostic: log lane_creep_data stats once per load. Helps identify frozen-creep bugs:
@@ -308,6 +319,7 @@ const MatchAnalysis = () => {
                   normalizePosition={normalizePosition}
                   matchData={matchAnalysis.parsed_match_data}
                   lanePressure={parsedMatchData.lane_pressure}
+                  sinners={parsedMatchData.sinners}
                 />
               </div>
               <div className='flex flex-col gap-2'>
@@ -329,6 +341,7 @@ const MatchAnalysis = () => {
                   stopRepeat={stopRepeat}
                   laneCreepData={parsedMatchData.lane_creep_data}
                   worldToMinimapPixels={worldToMinimapPixels}
+                  scaledSinnerSnapshots={scaledSinnerSnapshots}
                 />
               </div>
             </div>

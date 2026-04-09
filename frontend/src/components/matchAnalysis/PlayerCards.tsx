@@ -1,6 +1,7 @@
 import React from 'react';
 import { ParsedMatchData } from '../../domain/matchAnalysis';
 import { LanePressureData } from '../../domain/lanePressure';
+import { SinnerSnapshot } from '../../domain/sinner';
 import { Region } from '../../domain/region';
 import { regions } from '../../data/regions';
 import {
@@ -18,6 +19,7 @@ interface PlayerCardsProps {
   matchData: ParsedMatchData;
   lanePressure: LanePressureData;
   normalizePosition: (x: number, y: number) => { normX: number; normY: number };
+  sinners: SinnerSnapshot[];
 }
 
 function getPlayerRegionLabels(x: number, y: number): string[] {
@@ -36,6 +38,7 @@ const PlayerCards: React.FC<PlayerCardsProps> = ({
   currentTick,
   lanePressure,
   normalizePosition,
+  sinners,
 }) => {
   return (
     <>
@@ -56,6 +59,11 @@ const PlayerCards: React.FC<PlayerCardsProps> = ({
             customId,
             lanePressure,
             currentTick
+          );
+          const slotKey = String(player.lobby_player_slot);
+          const sinnerDamageTaken = sinners.reduce(
+            (total, s) => total + (s.retaliation_damage[slotKey] ?? 0),
+            0
           );
           const health = 0;
           // const health = playerPathState.health[currentTick];
@@ -151,6 +159,12 @@ const PlayerCards: React.FC<PlayerCardsProps> = ({
                         );
                       })
                     }
+                  </div>
+                  <div>
+                    <strong>Sinner damage taken:</strong>{' '}
+                    {sinnerDamageTaken > 0 ?
+                      sinnerDamageTaken
+                    : <span className='text-gray-400'>0</span>}
                   </div>
                   <div>
                     {Object.keys(victimDamageMap).length === 0 ?
