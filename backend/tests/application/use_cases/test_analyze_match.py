@@ -5,6 +5,7 @@ from app.domain.exceptions import ParserServiceError, DeadlockAPIError
 from app.domain.match_analysis import TransformedMatchData
 from app.domain.boss import BossData
 from app.domain.creep import LaneCreepData
+from app.domain.sinner import SinnerSnapshot
 
 
 @pytest.mark.asyncio
@@ -24,6 +25,7 @@ async def test_execute_returns_cached_data_when_available():
             health_timeline=[],
         ),
         lane_creep_data=LaneCreepData(creeps={}, wave_meta={}),
+        sinners=[],
     )
     mock_repo.get_match_data.return_value = cached_data
 
@@ -112,6 +114,7 @@ async def test_execute_falls_back_when_local_parse_fails():
             "positions": [],
             "bosses": {"snapshots": [], "health_timeline": []},
             "lane_creep_data": {"creeps": {}, "wave_meta": {}},
+            "sinners": [],
         },
     ]
     mock_deadlock.get_demo_url.return_value = {"demo_url": "http://example.com/demo.bz2"}

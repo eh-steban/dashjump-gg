@@ -14,6 +14,7 @@ from app.domain.match_analysis import (
     TransformedMatchData,
 )
 from app.domain.player import PlayerData
+from app.domain.sinner import SinnerSnapshot
 from app.repo.parsed_matches_repo import ParsedMatchesRepo
 from app.services.deadlock_api_service import DeadlockAPIService
 from app.services.match_data_service import MatchDataService
@@ -185,6 +186,9 @@ class AnalyzeMatchUseCase:
             else LaneCreepData(creeps={}, wave_meta={})
         )
 
+        sinners_raw = parsed_json_resp.get("sinners", [])
+        sinners_list = [SinnerSnapshot(**s) for s in sinners_raw]
+
         parsed_match = ParsedMatchResponse(
             match_duration_s=parsed_json_resp.get("match_duration_s", 0),
             match_start_time_s=parsed_json_resp.get("match_start_time_s", 0),
@@ -193,6 +197,7 @@ class AnalyzeMatchUseCase:
             positions=Positions(parsed_json_resp.get("positions", [])),
             bosses=BossData(**parsed_json_resp.get("bosses", {})),
             lane_creep_data=lane_creep_data,
+            sinners=sinners_list,
         )
 
         # Log compression metrics

@@ -16,6 +16,7 @@ from app.domain.boss import BossData
 from app.domain.creep import LaneCreepData
 from app.domain.deadlock_api import MatchMetadata, MatchInfoFields, MatchPaths
 from app.domain.lane_pressure import LanePressureData
+from app.domain.sinner import SinnerSnapshot
 from app.domain.exceptions import (
     DeadlockAPIError,
     MatchDataIntegrityException,
@@ -104,7 +105,65 @@ class TestMatchAnalysisSchema:
         assert hasattr(data, "per_player_data")
         assert hasattr(data, "bosses")
         assert hasattr(data, "lane_creep_data")
+        assert hasattr(data, "sinners")
         assert hasattr(data, "lane_pressure")
+
+    def test_sinners_defaults_to_empty_list(self):
+        data = _make_transformed_match_data()
+        assert data.sinners == []
+
+    def test_sinners_populated_and_round_trips_via_json(self):
+        """Confirm sinners survive a model_dump_json/model_validate_json round-trip.
+
+        Specifically exercises retaliation_damage string keys, which come from
+        Rust HashMap<u32, i32> serialized with serde (keys become JSON strings).
+        """
+        from app.domain.match_analysis import ParsedMatchResponse, Positions
+
+        snapshot = SinnerSnapshot(
+            entity_index=3340,
+            x=10.0,
+            y=20.0,
+            z=30.0,
+            spawn_time_s=420,
+            max_health=2000,
+            death_time_s=480,
+            time_alive_s=60,
+            killer_player_slot=4,
+            retaliation_damage={"0": 160, "4": 80},
+        )
+        alive_snapshot = SinnerSnapshot(
+            entity_index=3341,
+            x=11.0,
+            y=21.0,
+            z=31.0,
+            spawn_time_s=421,
+            max_health=2000,
+        )
+
+        data = TransformedMatchData(
+            match_duration_s=1800,
+            match_start_time_s=0,
+            players_data=[],
+            per_player_data={},
+            bosses=BossData(snapshots=[], health_timeline=[]),
+            lane_creep_data=LaneCreepData(creeps={}, wave_meta={}),
+            sinners=[snapshot, alive_snapshot],
+        )
+
+        json_str = data.model_dump_json()
+        reloaded = TransformedMatchData.model_validate_json(json_str)
+
+        assert len(reloaded.sinners) == 2
+        killed = reloaded.sinners[0]
+        assert killed.entity_index == 3340
+        assert killed.death_time_s == 480
+        assert killed.killer_player_slot == 4
+        assert killed.retaliation_damage == {"0": 160, "4": 80}
+
+        alive = reloaded.sinners[1]
+        assert alive.death_time_s is None
+        assert alive.retaliation_damage == {}
 
     def test_lane_pressure_defaults_to_empty(self):
         data = _make_transformed_match_data()
@@ -142,6 +201,7 @@ class TestMatchAnalysisSchema:
         assert "per_player_data" in pd
         assert "bosses" in pd
         assert "lane_creep_data" in pd
+        assert "sinners" in pd
         assert "lane_pressure" in pd
 
 

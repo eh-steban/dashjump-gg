@@ -12,6 +12,7 @@ from app.domain.player import (
     Positions,
     ParsedAttackerVictimMap
 )
+from app.domain.sinner import SinnerSnapshot
 
 class ParsedMatchResponse(SQLModel):
     match_duration_s: int
@@ -27,6 +28,7 @@ class ParsedMatchResponse(SQLModel):
     positions: Positions
     bosses: BossData
     lane_creep_data: LaneCreepData
+    sinners: list[SinnerSnapshot] = []
 
 # TODO: Created a temporary ParsedPlayer class to make this happy
 # Might change this later
@@ -38,6 +40,7 @@ class TransformedMatchData(SQLModel):
     per_player_data: dict[str, PlayerMatchData]
     bosses: BossData
     lane_creep_data: LaneCreepData
+    sinners: list[SinnerSnapshot] = []
     lane_pressure: LanePressureData = LanePressureData(pressure={})
 
 class MatchAnalysis(SQLModel):
