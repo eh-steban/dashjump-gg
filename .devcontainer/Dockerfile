@@ -54,7 +54,10 @@ RUN curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
     && rm -rf /var/lib/apt/lists/*
 
 # === Neovim ===
-RUN curl -LO https://github.com/neovim/neovim/releases/download/v0.10.4/nvim-linux-x86_64.tar.gz \
+# Keep this version in lockstep with the host install so the shared
+# ~/.config/nvim works identically in both environments.
+ARG NVIM_VERSION=0.12.1
+RUN curl -LO https://github.com/neovim/neovim/releases/download/v${NVIM_VERSION}/nvim-linux-x86_64.tar.gz \
     && tar -C /opt -xzf nvim-linux-x86_64.tar.gz \
     && ln -s /opt/nvim-linux-x86_64/bin/nvim /usr/local/bin/nvim \
     && rm nvim-linux-x86_64.tar.gz
