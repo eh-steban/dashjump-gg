@@ -46,25 +46,37 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Boss type priority (lower number = attacked first by creeps).
-# custom_id values come from parser/src/replay_parser.rs::get_custom_id -- a flat
-# enum of all NPC serializer names, not a priority ordering. Walker happens to sit
-# at custom_id=28 (between Shrine=27 and Patron=29) and Patron at 29 because of the
-# order the entity types were added to the parser. Do NOT assume the numeric value
-# tracks attack priority; use this map explicitly.
-_BOSS_PRIORITY: dict[int, int] = {
-    21: 1,  # CNPC_TrooperBoss              - Guardian
-    28: 2,  # CNPC_Boss_Tier2               - Walker
-    26: 3,  # CNPC_BarrackBoss              - Base Guardian
-    27: 4,  # CCitadel_Destroyable_Building - Shrine
-    29: 5,  # CNPC_Boss_Tier3               - Patron
-}
+# Canonical boss type identifiers.
+#
+# These are the u64 fxhash values of the SendTable serializer names, computed
+# in parser/src/entities/constants.rs at Rust compile time and emitted on every
+# BossSnapshot as `boss_name_hash`. They are the single source of truth for
+# boss-type matching across services -- `custom_id` on BossSnapshot is a
+# convenience enum from the parser's `get_custom_id` and is not load-bearing
+# here.
+#
+# To resync if parser/src/entities/constants.rs adds or renames a boss type:
+#   DELETE FROM parsedmatch WHERE match_id = <any parsed match>;
+#   curl http://localhost:8000/match/analysis/<that match>;
+#   SELECT DISTINCT (s->>'boss_name_hash') FROM parsedmatch,
+#     jsonb_array_elements(match_data->'bosses'->'snapshots') s
+#     WHERE match_id = <that match>;
+# and paste the values here.
+BOSS_HASH_GUARDIAN = 12946736302082733589       # CNPC_TrooperBoss
+BOSS_HASH_WALKER = 1942975293714691302          # CNPC_Boss_Tier2
+BOSS_HASH_BASE_GUARDIAN = 793562361056549792    # CNPC_BarrackBoss
+BOSS_HASH_SHRINE = 8292725763874089450          # CCitadel_Destroyable_Building
+BOSS_HASH_PATRON = 7814756300278693755          # CNPC_Boss_Tier3
 
-# custom_id constants used while building lane paths. Same source as _BOSS_PRIORITY.
-_GUARDIAN_CID = 21
-_BASE_GUARDIAN_CID = 26
-_WALKER_CID = 28
-_PATRON_CID = 29
+# Attack priority (lower number = attacked first by creeps).
+# Keyed on boss_name_hash so the mapping stays anchored to constants.rs.
+_BOSS_PRIORITY: dict[int, int] = {
+    BOSS_HASH_GUARDIAN: 1,
+    BOSS_HASH_WALKER: 2,
+    BOSS_HASH_BASE_GUARDIAN: 3,
+    BOSS_HASH_SHRINE: 4,
+    BOSS_HASH_PATRON: 5,
+}
 
 # Enemy team mapping
 # bidirectional lookup table:
@@ -298,16 +310,16 @@ class LanePressureCalculator:
         """
         by_key: dict[tuple[int, int, int], list[BossSnapshot]] = {}
         for s in boss_data.snapshots:
-            by_key.setdefault((s.team, s.lane, s.custom_id), []).append(s)
+            by_key.setdefault((s.team, s.lane, s.boss_name_hash), []).append(s)
 
-        def single(team: int, lane: int, cid: int) -> Optional[tuple[float, float]]:
-            matches = by_key.get((team, lane, cid), [])
+        def single(team: int, lane: int, hash_: int) -> Optional[tuple[float, float]]:
+            matches = by_key.get((team, lane, hash_), [])
             if not matches:
                 return None
             return (matches[0].x, matches[0].y)
 
-        def midpoint(team: int, lane: int, cid: int) -> Optional[tuple[float, float]]:
-            matches = by_key.get((team, lane, cid), [])
+        def midpoint(team: int, lane: int, hash_: int) -> Optional[tuple[float, float]]:
+            matches = by_key.get((team, lane, hash_), [])
             if not matches:
                 return None
             mean_x = sum(s.x for s in matches) / len(matches)
@@ -321,30 +333,30 @@ class LanePressureCalculator:
 
         for team in (2, 3):
             enemy = _ENEMY_TEAM[team]
-            own_patron = single(team, 0, _PATRON_CID)
-            enemy_patron = single(enemy, 0, _PATRON_CID)
+            own_patron = single(team, 0, BOSS_HASH_PATRON)
+            enemy_patron = single(enemy, 0, BOSS_HASH_PATRON)
 
             for lane in lane_ids:
                 wp: list[tuple[float, float]] = []
                 if own_patron:
                     wp.append(own_patron)
-                own_bg = midpoint(team, lane, _BASE_GUARDIAN_CID)
+                own_bg = midpoint(team, lane, BOSS_HASH_BASE_GUARDIAN)
                 if own_bg:
                     wp.append(own_bg)
-                own_walker = single(team, lane, _WALKER_CID)
+                own_walker = single(team, lane, BOSS_HASH_WALKER)
                 if own_walker:
                     wp.append(own_walker)
-                own_guardian = single(team, lane, _GUARDIAN_CID)
+                own_guardian = single(team, lane, BOSS_HASH_GUARDIAN)
                 if own_guardian:
                     wp.append(own_guardian)
 
-                enemy_guardian = single(enemy, lane, _GUARDIAN_CID)
+                enemy_guardian = single(enemy, lane, BOSS_HASH_GUARDIAN)
                 if enemy_guardian:
                     wp.append(enemy_guardian)
-                enemy_walker = single(enemy, lane, _WALKER_CID)
+                enemy_walker = single(enemy, lane, BOSS_HASH_WALKER)
                 if enemy_walker:
                     wp.append(enemy_walker)
-                enemy_bg = midpoint(enemy, lane, _BASE_GUARDIAN_CID)
+                enemy_bg = midpoint(enemy, lane, BOSS_HASH_BASE_GUARDIAN)
                 if enemy_bg:
                     wp.append(enemy_bg)
                 if enemy_patron:
@@ -366,10 +378,11 @@ class LanePressureCalculator:
             key = (snap.lane, snap.team)
             objective_map.setdefault(key, []).append(snap)
 
-        # Sort each bucket by priority (lower custom_id priority value = first target)
+        # Sort each bucket by attack priority. Priority is keyed on boss_name_hash
+        # (u64 fxhash from parser/src/entities/constants.rs), not custom_id.
         for key in objective_map:
             objective_map[key].sort(
-                key=lambda s: _BOSS_PRIORITY.get(s.custom_id, 99)
+                key=lambda s: _BOSS_PRIORITY.get(s.boss_name_hash, 99)
             )
 
         return objective_map

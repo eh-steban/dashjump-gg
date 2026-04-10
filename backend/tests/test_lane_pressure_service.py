@@ -14,7 +14,14 @@ import pytest
 from app.domain.boss import BossData, BossSnapshot
 from app.domain.creep import CreepSnapshot, LaneCreepData, WaveMeta
 from app.domain.lane_pressure import LanePressureData, LanePressureSnapshot
-from app.services.lane_pressure_service import LanePressureCalculator, _euclidean
+from app.services.lane_pressure_service import (
+    BOSS_HASH_BASE_GUARDIAN,
+    BOSS_HASH_GUARDIAN,
+    BOSS_HASH_PATRON,
+    BOSS_HASH_WALKER,
+    LanePressureCalculator,
+    _euclidean,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -23,16 +30,21 @@ from app.services.lane_pressure_service import LanePressureCalculator, _euclidea
 
 def _make_boss(
     entity_index: int,
-    custom_id: int,
+    hash_: int,
     lane: int,
     team: int,
     x: float,
     y: float,
 ) -> BossSnapshot:
+    """Build a BossSnapshot mock. `hash_` is the u64 boss_name_hash -- use one
+    of the BOSS_HASH_* constants from lane_pressure_service to identify the
+    boss type. custom_id is a convenience field that the service no longer
+    consults, so it is left at 0.
+    """
     return BossSnapshot(
         entity_index=entity_index,
-        custom_id=custom_id,
-        boss_name_hash=custom_id,
+        custom_id=0,
+        boss_name_hash=hash_,
         team=team,
         lane=lane,
         x=x,
@@ -79,8 +91,8 @@ class TestPressureWithAliveCreeps:
         """Four alive creeps close to enemy guardian should produce pressure between 0.25 and 1.0."""
         # Lane 1, team 2 creeps push toward team 3's guardian
         # Guardian team 2 at y=-5000, Guardian team 3 at y=5000 → lane_length ≈ 10000
-        own_guardian = _make_boss(1, 21, lane=1, team=2, x=0.0, y=-5000.0)
-        enemy_guardian = _make_boss(2, 21, lane=1, team=3, x=0.0, y=5000.0)
+        own_guardian = _make_boss(1, BOSS_HASH_GUARDIAN, lane=1, team=2, x=0.0, y=-5000.0)
+        enemy_guardian = _make_boss(2, BOSS_HASH_GUARDIAN, lane=1, team=3, x=0.0, y=5000.0)
         boss_data = BossData(
             snapshots=[own_guardian, enemy_guardian],
             health_timeline=[{"2": 10000}],  # enemy guardian alive at second 0
@@ -117,8 +129,8 @@ class TestPressureWithAliveCreeps:
 class TestNoAliveCreeps:
     def test_returns_none_when_creeps_dead_at_second(self):
         """A second where all creeps in a wave are dead must produce a None snapshot."""
-        own_guardian = _make_boss(1, 21, lane=1, team=2, x=0.0, y=-5000.0)
-        enemy_guardian = _make_boss(2, 21, lane=1, team=3, x=0.0, y=5000.0)
+        own_guardian = _make_boss(1, BOSS_HASH_GUARDIAN, lane=1, team=2, x=0.0, y=-5000.0)
+        enemy_guardian = _make_boss(2, BOSS_HASH_GUARDIAN, lane=1, team=3, x=0.0, y=5000.0)
         boss_data = BossData(
             snapshots=[own_guardian, enemy_guardian],
             health_timeline=[{"2": 10000}, {"2": 10000}],
@@ -149,8 +161,8 @@ class TestNoAliveCreeps:
 class TestPartialAliveCreeps:
     def test_two_alive_uses_half_multiplier(self):
         """With 2 alive creeps the multiplier is 2 × 0.25 = 0.5."""
-        own_guardian = _make_boss(1, 21, lane=1, team=2, x=0.0, y=-5000.0)
-        enemy_guardian = _make_boss(2, 21, lane=1, team=3, x=0.0, y=5000.0)
+        own_guardian = _make_boss(1, BOSS_HASH_GUARDIAN, lane=1, team=2, x=0.0, y=-5000.0)
+        enemy_guardian = _make_boss(2, BOSS_HASH_GUARDIAN, lane=1, team=3, x=0.0, y=5000.0)
         boss_data = BossData(
             snapshots=[own_guardian, enemy_guardian],
             health_timeline=[{"2": 10000}],
@@ -193,10 +205,10 @@ class TestPartialAliveCreeps:
 class TestObjectiveChaining:
     def test_pressure_targets_walker_when_guardian_dead(self):
         """When enemy guardian has 0 health, the next objective (walker) should be targeted."""
-        own_guardian = _make_boss(1, 21, lane=1, team=2, x=0.0, y=-5000.0)
-        enemy_guardian = _make_boss(2, 21, lane=1, team=3, x=0.0, y=4000.0)
+        own_guardian = _make_boss(1, BOSS_HASH_GUARDIAN, lane=1, team=2, x=0.0, y=-5000.0)
+        enemy_guardian = _make_boss(2, BOSS_HASH_GUARDIAN, lane=1, team=3, x=0.0, y=4000.0)
         # custom_id=28 is CNPC_Boss_Tier2 (Walker) in the parser, not 25.
-        enemy_walker = _make_boss(3, 28, lane=1, team=3, x=0.0, y=7000.0)
+        enemy_walker = _make_boss(3, BOSS_HASH_WALKER, lane=1, team=3, x=0.0, y=7000.0)
         boss_data = BossData(
             snapshots=[own_guardian, enemy_guardian, enemy_walker],
             # At second 0: enemy guardian dead (0 health), walker alive
@@ -245,10 +257,10 @@ class TestProcessCreepWavesIntegration:
 
     def test_two_waves_separate_keys(self):
         """Two waves in different lanes should produce two separate pressure keys."""
-        own_g_l1 = _make_boss(1, 21, lane=1, team=2, x=0.0, y=-5000.0)
-        emy_g_l1 = _make_boss(2, 21, lane=1, team=3, x=0.0, y=5000.0)
-        own_g_l2 = _make_boss(3, 21, lane=2, team=2, x=-5000.0, y=0.0)
-        emy_g_l2 = _make_boss(4, 21, lane=2, team=3, x=5000.0, y=0.0)
+        own_g_l1 = _make_boss(1, BOSS_HASH_GUARDIAN, lane=1, team=2, x=0.0, y=-5000.0)
+        emy_g_l1 = _make_boss(2, BOSS_HASH_GUARDIAN, lane=1, team=3, x=0.0, y=5000.0)
+        own_g_l2 = _make_boss(3, BOSS_HASH_GUARDIAN, lane=2, team=2, x=-5000.0, y=0.0)
+        emy_g_l2 = _make_boss(4, BOSS_HASH_GUARDIAN, lane=2, team=3, x=5000.0, y=0.0)
 
         boss_data = BossData(
             snapshots=[own_g_l1, emy_g_l1, own_g_l2, emy_g_l2],
@@ -281,8 +293,8 @@ class TestProcessCreepWavesIntegration:
 
     def test_attributed_players_union_across_creeps(self):
         """attributed_players should be the union of all alive creeps' nearby_players."""
-        own_guardian = _make_boss(1, 21, lane=1, team=2, x=0.0, y=-5000.0)
-        enemy_guardian = _make_boss(2, 21, lane=1, team=3, x=0.0, y=5000.0)
+        own_guardian = _make_boss(1, BOSS_HASH_GUARDIAN, lane=1, team=2, x=0.0, y=-5000.0)
+        enemy_guardian = _make_boss(2, BOSS_HASH_GUARDIAN, lane=1, team=3, x=0.0, y=5000.0)
         boss_data = BossData(
             snapshots=[own_guardian, enemy_guardian],
             health_timeline=[{"2": 10000}],
@@ -315,17 +327,17 @@ class TestProcessCreepWavesIntegration:
         Boss coordinates are the actual values from match 68182475.
         """
         # Team 2 (amber) lane 1 objectives
-        own_patron = _make_boss(295, 29, lane=0, team=2, x=0.0, y=-8034.0)
-        own_bg_a = _make_boss(344, 26, lane=1, team=2, x=-1760.0, y=-6396.0)
-        own_bg_b = _make_boss(345, 26, lane=1, team=2, x=-1760.0, y=-6756.0)
-        own_walker = _make_boss(302, 28, lane=1, team=2, x=-6272.0, y=-4736.0)
-        own_guardian = _make_boss(2527, 21, lane=1, team=2, x=-8128.0, y=-1856.0)
+        own_patron = _make_boss(295, BOSS_HASH_PATRON, lane=0, team=2, x=0.0, y=-8034.0)
+        own_bg_a = _make_boss(344, BOSS_HASH_BASE_GUARDIAN, lane=1, team=2, x=-1760.0, y=-6396.0)
+        own_bg_b = _make_boss(345, BOSS_HASH_BASE_GUARDIAN, lane=1, team=2, x=-1760.0, y=-6756.0)
+        own_walker = _make_boss(302, BOSS_HASH_WALKER, lane=1, team=2, x=-6272.0, y=-4736.0)
+        own_guardian = _make_boss(2527, BOSS_HASH_GUARDIAN, lane=1, team=2, x=-8128.0, y=-1856.0)
         # Team 3 (sapphire) lane 1 objectives
-        enemy_guardian = _make_boss(2530, 21, lane=1, team=3, x=-7040.0, y=1984.0)
-        enemy_walker = _make_boss(299, 28, lane=1, team=3, x=-5440.0, y=5024.0)
-        enemy_bg_a = _make_boss(348, 26, lane=1, team=3, x=-1760.0, y=6396.0)
-        enemy_bg_b = _make_boss(349, 26, lane=1, team=3, x=-1760.0, y=6788.0)
-        enemy_patron = _make_boss(294, 29, lane=0, team=3, x=0.0, y=8048.0)
+        enemy_guardian = _make_boss(2530, BOSS_HASH_GUARDIAN, lane=1, team=3, x=-7040.0, y=1984.0)
+        enemy_walker = _make_boss(299, BOSS_HASH_WALKER, lane=1, team=3, x=-5440.0, y=5024.0)
+        enemy_bg_a = _make_boss(348, BOSS_HASH_BASE_GUARDIAN, lane=1, team=3, x=-1760.0, y=6396.0)
+        enemy_bg_b = _make_boss(349, BOSS_HASH_BASE_GUARDIAN, lane=1, team=3, x=-1760.0, y=6788.0)
+        enemy_patron = _make_boss(294, BOSS_HASH_PATRON, lane=0, team=3, x=0.0, y=8048.0)
 
         boss_data = BossData(
             snapshots=[
@@ -372,8 +384,8 @@ class TestProcessCreepWavesIntegration:
         Place creep at y=-10000, which is beyond the own guardian at y=-9000
         (further from enemy). dist(creep→enemy_guardian) > lane_length → clamped to 0.
         """
-        own_guardian = _make_boss(1, 21, lane=1, team=2, x=0.0, y=-9000.0)
-        enemy_guardian = _make_boss(2, 21, lane=1, team=3, x=0.0, y=9000.0)
+        own_guardian = _make_boss(1, BOSS_HASH_GUARDIAN, lane=1, team=2, x=0.0, y=-9000.0)
+        enemy_guardian = _make_boss(2, BOSS_HASH_GUARDIAN, lane=1, team=3, x=0.0, y=9000.0)
         boss_data = BossData(
             snapshots=[own_guardian, enemy_guardian],
             health_timeline=[{"2": 10000}],
