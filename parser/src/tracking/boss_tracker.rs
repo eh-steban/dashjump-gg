@@ -128,11 +128,79 @@ impl BossTracker {
     ///
     /// Called by `handle_boss_delete` to ensure carry-forward correctly reports
     /// the boss as dead. Also callable directly in tests.
+    ///
+    /// Skips untracked entities. The DELETE event in `replay_parser` fires for
+    /// every entity (creeps, projectiles, map props), so without this guard
+    /// `or_insert_with` would create spurious `health=0` entries for thousands of
+    /// non-boss entities, polluting `health_timeline`.
     fn record_death_health(&mut self, entity_index: i32, current_time_s: u32) {
+        if !self.bosses.contains_key(&entity_index) {
+            return;
+        }
         self.health_samples
             .entry(entity_index)
             .or_insert_with(Vec::new)
             .push((current_time_s, 0));
+    }
+
+    /// Handle a boss entity UPDATE event.
+    ///
+    /// Captures both `m_iMaxHealth` and `m_iHealth` on every update, so the
+    /// health timeline reflects non-damage HP changes documented in the wiki:
+    ///
+    /// - Walker sibling-death scaling: flat +3000 max_health and full heal
+    ///   (6000 -> 9000 -> 12000). See <https://deadlock.wiki/Walker>.
+    /// - Shrine sibling scaling: the surviving Shrine jumps from 5000 to 10000
+    ///   with a matching heal. See <https://deadlock.wiki/Shrine>.
+    /// - Patron Phase 1 -> Phase 2 transition: health resets to the phase 2
+    ///   starting value even though `m_iMaxHealth` may not change (both phases
+    ///   start at 12000). Also covers Patron time-based scaling (+250/min in
+    ///   phase 1 after 20:00, +450/min in phase 2). See
+    ///   <https://deadlock.wiki/Patron>.
+    /// - Out-of-combat regen (Patron 120/s, Base Guardian 65/s during backdoor
+    ///   protection). Captured whenever an UPDATE fires on the entity.
+    ///
+    /// Without sampling current health here, the previous damage-driven sample
+    /// carries forward through scaling/heal/regen events and the timeline shows
+    /// a stale (too low) value until the next damage hit.
+    pub fn handle_boss_update(&mut self, entity: &Entity, current_time_s: u32) {
+        let entity_index = entity.index();
+        let new_max_health = entity.get_value::<i32>(&self.max_health_key).unwrap_or(0);
+        self.update_max_health(entity_index, new_max_health);
+
+        let current_health = entity.get_value::<i32>(&self.health_key).unwrap_or(0);
+        self.record_current_health(entity_index, current_time_s, current_health);
+    }
+
+    /// Update the stored `max_health` for a tracked boss when the live value changes.
+    ///
+    /// No-op for untracked entities and for non-positive `new_max_health` values
+    /// (which can briefly appear during entity teardown).
+    fn update_max_health(&mut self, entity_index: i32, new_max_health: i32) {
+        if new_max_health <= 0 {
+            return;
+        }
+        if let Some(boss) = self.bosses.get_mut(&entity_index) {
+            if boss.max_health != new_max_health {
+                boss.max_health = new_max_health;
+            }
+        }
+    }
+
+    /// Append a current-health sample for a tracked boss.
+    ///
+    /// Complements `record_boss_damage` (which samples on damage game events)
+    /// by capturing non-damage health changes observed through entity UPDATEs.
+    /// Untracked entities are skipped so unrelated entity updates cannot create
+    /// spurious entries.
+    fn record_current_health(&mut self, entity_index: i32, current_time_s: u32, health: i32) {
+        if !self.bosses.contains_key(&entity_index) {
+            return;
+        }
+        self.health_samples
+            .entry(entity_index)
+            .or_insert_with(Vec::new)
+            .push((current_time_s, health));
     }
 
     /// Record boss damage event for health tracking

@@ -455,6 +455,16 @@ impl Visitor for &mut MyVisitor {
                 if !self.lane_data_updated {
                     self.check_and_update_lane_lock(entity)?;
                 }
+                // Sample boss state (max_health + current health) on every UPDATE.
+                // Captures non-damage HP changes: Walker/Shrine sibling-scaling
+                // heals, Patron phase 1->2 reset, Patron time-based scaling,
+                // and out-of-combat regen.
+                if self.boss_tracker.is_boss_entity(hash) {
+                    let match_time_s = self.total_match_time_s.saturating_sub(
+                        self.match_start_time_s.unwrap_or(0),
+                    );
+                    self.boss_tracker.handle_boss_update(entity, match_time_s);
+                }
                 // Update creep positions (only if match started).
                 // Lane=0 filtering is handled inside handle_creep_update: already-registered
                 // creeps always receive position updates (their lane may transiently read 0
