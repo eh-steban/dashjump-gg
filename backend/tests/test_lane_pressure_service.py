@@ -195,7 +195,8 @@ class TestObjectiveChaining:
         """When enemy guardian has 0 health, the next objective (walker) should be targeted."""
         own_guardian = _make_boss(1, 21, lane=1, team=2, x=0.0, y=-5000.0)
         enemy_guardian = _make_boss(2, 21, lane=1, team=3, x=0.0, y=4000.0)
-        enemy_walker = _make_boss(3, 25, lane=1, team=3, x=0.0, y=7000.0)
+        # custom_id=28 is CNPC_Boss_Tier2 (Walker) in the parser, not 25.
+        enemy_walker = _make_boss(3, 28, lane=1, team=3, x=0.0, y=7000.0)
         boss_data = BossData(
             snapshots=[own_guardian, enemy_guardian, enemy_walker],
             # At second 0: enemy guardian dead (0 health), walker alive
@@ -301,6 +302,69 @@ class TestProcessCreepWavesIntegration:
         snap = result.pressure[wave_id][0]
         assert snap is not None
         assert set(snap.attributed_players) == {0, 1, 2}
+
+    def test_lbend_lane_produces_nonzero_pressure_past_the_bend(self):
+        """Regression: match 68182475 lane 1 at ~22:40.
+
+        Amber (team 2) creeps clustered past the enemy guardian in the bend near
+        sapphire's base guardian. Pre-fix, the calc combined a stale-guardian target
+        with straight-line lane_length, producing 0.0 pressure. Post-fix (boss health
+        fresh + path-aware projection), pressure should be high (>=0.9) because the
+        wave is right next to its real target.
+
+        Boss coordinates are the actual values from match 68182475.
+        """
+        # Team 2 (amber) lane 1 objectives
+        own_patron = _make_boss(295, 29, lane=0, team=2, x=0.0, y=-8034.0)
+        own_bg_a = _make_boss(344, 26, lane=1, team=2, x=-1760.0, y=-6396.0)
+        own_bg_b = _make_boss(345, 26, lane=1, team=2, x=-1760.0, y=-6756.0)
+        own_walker = _make_boss(302, 28, lane=1, team=2, x=-6272.0, y=-4736.0)
+        own_guardian = _make_boss(2527, 21, lane=1, team=2, x=-8128.0, y=-1856.0)
+        # Team 3 (sapphire) lane 1 objectives
+        enemy_guardian = _make_boss(2530, 21, lane=1, team=3, x=-7040.0, y=1984.0)
+        enemy_walker = _make_boss(299, 28, lane=1, team=3, x=-5440.0, y=5024.0)
+        enemy_bg_a = _make_boss(348, 26, lane=1, team=3, x=-1760.0, y=6396.0)
+        enemy_bg_b = _make_boss(349, 26, lane=1, team=3, x=-1760.0, y=6788.0)
+        enemy_patron = _make_boss(294, 29, lane=0, team=3, x=0.0, y=8048.0)
+
+        boss_data = BossData(
+            snapshots=[
+                own_patron, own_bg_a, own_bg_b, own_walker, own_guardian,
+                enemy_guardian, enemy_walker, enemy_bg_a, enemy_bg_b, enemy_patron,
+            ],
+            # At the scrutinized second: enemy guardian and walker dead, BGs alive,
+            # patron alive. Own walker alive, own guardian dead.
+            health_timeline=[{
+                str(own_guardian.entity_index): 0,   # own guardian dead
+                str(own_walker.entity_index): 5000,  # own walker alive
+                str(own_bg_a.entity_index): 4000,
+                str(own_bg_b.entity_index): 4000,
+                str(own_patron.entity_index): 12000,
+                str(enemy_guardian.entity_index): 0,   # enemy guardian dead
+                str(enemy_walker.entity_index): 0,     # enemy walker dead
+                str(enemy_bg_a.entity_index): 4000,    # BGs alive
+                str(enemy_bg_b.entity_index): 4000,
+                str(enemy_patron.entity_index): 12000,
+            }],
+        )
+
+        wave_id = "1_2_1360"
+        # Creep centroid clustered right next to the enemy base guardian pair
+        creep_snap = _make_creep(lane=1, team=2, wave_id=wave_id, x=-2000.0, y=6600.0)
+
+        lane_creep_data = LaneCreepData(
+            creeps={f"{i}": [creep_snap] for i in range(100, 104)},
+            wave_meta={wave_id: WaveMeta(lane=1, team=2, spawn_sec=1360)},
+        )
+
+        result = LanePressureCalculator.process_creep_waves(lane_creep_data, boss_data)
+
+        snap = result.pressure[wave_id][0]
+        assert snap is not None
+        # Creeps are right next to enemy BG -- should read as very high pressure.
+        assert snap.pressure >= 0.9, (
+            f"Expected high pressure near enemy BG, got {snap.pressure}"
+        )
 
     def test_pressure_clamped_to_zero_behind_own_base(self):
         """A creep that spawns behind its own guardian (negative territory) gets 0.0 pressure.

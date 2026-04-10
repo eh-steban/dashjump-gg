@@ -1,16 +1,32 @@
 """Lane pressure calculation service.
 
-Computes per-wave, per-second pressure based on alive creep positions relative
-to the nearest alive enemy lane objective (lane-assigned, not proximity-based).
+Computes per-wave, per-second pressure by projecting the creep centroid onto
+the static waypoint chain that defines each lane's physical path. Lanes 1 and 6
+bend sharply near the base (guardian is horizontal midfield; base guardian is
+vertical near the base), so straight-line Euclidean distance from centroid to
+target understates progress when creeps sit in the bend. Path projection along
+the waypoint chain corrects that.
 
 Formula per second:
-  centroid      = mean position of alive creeps in wave
-  target        = nearest alive enemy objective (Guardian → Walker → ... → Patron)
-  own_frontline = nearest alive own objective (same priority ordering, own team)
-  lane_length   = euclidean(own_frontline, target)  -- dynamic; shrinks as objectives die
-  dist          = euclidean(centroid, target)
-  raw_pressure  = clamp(1.0 - dist / lane_length, 0.0, 1.0)
-  pressure      = raw_pressure * (alive_creep_count * 0.25)
+  centroid           = mean position of alive creeps in wave
+  target             = nearest alive enemy objective (Guardian -> Walker -> ... -> Patron)
+  own_frontline      = nearest alive own objective (same priority ordering, own team)
+  lane_path          = static polyline
+                       [own_patron, own_base_guard_midpoint, own_walker, own_guardian,
+                        enemy_guardian, enemy_walker, enemy_base_guard_midpoint, enemy_patron]
+  centroid_progress  = cumulative distance from own_patron to the nearest projection
+                       of centroid onto the polyline
+  own_frontline_prog = same projection applied to own_frontline
+  target_prog        = same projection applied to target
+  contested_zone_len = target_prog - own_frontline_prog
+  raw_pressure       = clamp((centroid_progress - own_frontline_prog) / contested_zone_len, 0, 1)
+  pressure           = raw_pressure * (alive_creep_count * 0.25)
+
+When the lane path cannot be built (degenerate boss data -- e.g. tests with only
+two guardians), the calculation falls back to the original
+`1 - euclidean(centroid, target) / euclidean(own_frontline, target)` formula. Both
+formulas agree on straight lanes; the path variant is only meaningfully different
+on lanes with a bend.
 
 Ghost creep filtering note:
   The parser's CreepTracker already suppresses dead and ghost entities at the snapshot
@@ -30,16 +46,25 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Boss type priority (lower number = attacked first by creeps)
-# Maps boss_name_hash custom_id values from parser to priority order.
-# Priority: Guardian=1, Walker=2, Base Guardian=3, Shrine=4, Patron=5
+# Boss type priority (lower number = attacked first by creeps).
+# custom_id values come from parser/src/replay_parser.rs::get_custom_id -- a flat
+# enum of all NPC serializer names, not a priority ordering. Walker happens to sit
+# at custom_id=28 (between Shrine=27 and Patron=29) and Patron at 29 because of the
+# order the entity types were added to the parser. Do NOT assume the numeric value
+# tracks attack priority; use this map explicitly.
 _BOSS_PRIORITY: dict[int, int] = {
-    21: 1,  # CNPC_TROOPERBOSS_ENTITY  - Guardian
-    25: 2,  # CNPC_BOSS_TIER2_ENTITY   - Walker
-    26: 3,  # CNPC_BARRACKBOSS_ENTITY  - Base Guardian
-    27: 4,  # CCITADEL_DESTROYABLE_BUILDING_ENTITY - Shrine
-    28: 5,  # CNPC_BOSS_TIER3_ENTITY   - Patron
+    21: 1,  # CNPC_TrooperBoss              - Guardian
+    28: 2,  # CNPC_Boss_Tier2               - Walker
+    26: 3,  # CNPC_BarrackBoss              - Base Guardian
+    27: 4,  # CCitadel_Destroyable_Building - Shrine
+    29: 5,  # CNPC_Boss_Tier3               - Patron
 }
+
+# custom_id constants used while building lane paths. Same source as _BOSS_PRIORITY.
+_GUARDIAN_CID = 21
+_BASE_GUARDIAN_CID = 26
+_WALKER_CID = 28
+_PATRON_CID = 29
 
 # Enemy team mapping
 # bidirectional lookup table:
@@ -55,6 +80,54 @@ def _euclidean(x1: float, y1: float, x2: float, y2: float) -> float:
 
 def _clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, value))
+
+
+def _project_onto_path(
+    px: float,
+    py: float,
+    waypoints: list[tuple[float, float]],
+) -> tuple[float, float]:
+    """Project a point onto a polyline.
+
+    Returns (progress, total_length) where progress is the cumulative distance
+    from waypoints[0] along the path to the nearest projection point, and
+    total_length is the full polyline length. If waypoints has fewer than two
+    points, both values are 0.0.
+    """
+    if len(waypoints) < 2:
+        return 0.0, 0.0
+
+    best_progress = 0.0
+    best_dist_sq = float("inf")
+    cumulative = 0.0
+
+    for i in range(len(waypoints) - 1):
+        ax, ay = waypoints[i]
+        bx, by = waypoints[i + 1]
+        seg_dx = bx - ax
+        seg_dy = by - ay
+        seg_len_sq = seg_dx * seg_dx + seg_dy * seg_dy
+        if seg_len_sq == 0.0:
+            continue
+        seg_len = math.sqrt(seg_len_sq)
+
+        # Project (px, py) onto the segment [a, b], clamped to [0, 1]
+        t = ((px - ax) * seg_dx + (py - ay) * seg_dy) / seg_len_sq
+        t_clamped = _clamp(t, 0.0, 1.0)
+
+        proj_x = ax + t_clamped * seg_dx
+        proj_y = ay + t_clamped * seg_dy
+        dx = px - proj_x
+        dy = py - proj_y
+        dist_sq = dx * dx + dy * dy
+
+        if dist_sq < best_dist_sq:
+            best_dist_sq = dist_sq
+            best_progress = cumulative + t_clamped * seg_len
+
+        cumulative += seg_len
+
+    return best_progress, cumulative
 
 
 class LanePressureCalculator:
@@ -85,6 +158,9 @@ class LanePressureCalculator:
         # Build objective lookup: (lane, team) -> sorted list of BossSnapshots by priority
         objective_map = LanePressureCalculator._build_objective_map(boss_data)
 
+        # Static waypoint chains per (lane, team) for path-aware pressure calc.
+        lane_paths = LanePressureCalculator._build_lane_paths(boss_data)
+
         pressure_timeline: dict[str, list[Optional[LanePressureSnapshot]]] = {}
 
         for wave_id, wave_meta in lane_creep_data.wave_meta.items():
@@ -97,6 +173,7 @@ class LanePressureCalculator:
 
             own_objectives = objective_map.get((lane, team), [])
             enemy_objectives = objective_map.get((lane, enemy_team), [])
+            lane_path = lane_paths.get((lane, team), [])
 
             # Determine timeline length from creep data
             timeline_length = LanePressureCalculator._wave_timeline_length(
@@ -116,20 +193,24 @@ class LanePressureCalculator:
                     snapshots.append(None)
                     continue
 
-                # Centroid (internal only — not in output)
+                # Centroid (internal only -- not in output)
                 centroid_x = sum(c.x for c in alive_creeps) / len(alive_creeps)
                 centroid_y = sum(c.y for c in alive_creeps) / len(alive_creeps)
 
-                # Dynamic lane_length: distance between own frontline and enemy frontline at this second
                 target = LanePressureCalculator._current_target(
                     enemy_objectives, boss_data, second
                 )
                 own_frontline = LanePressureCalculator._own_frontline_objective(
                     own_objectives, boss_data, second
                 )
-                lane_length = _euclidean(own_frontline.x, own_frontline.y, target.x, target.y)
-                dist = _euclidean(centroid_x, centroid_y, target.x, target.y)
-                raw_pressure = _clamp(1.0 - dist / lane_length, 0.0, 1.0)
+
+                raw_pressure = LanePressureCalculator._raw_pressure(
+                    centroid_x=centroid_x,
+                    centroid_y=centroid_y,
+                    own_frontline=own_frontline,
+                    target=target,
+                    lane_path=lane_path,
+                )
 
                 pressure = raw_pressure * (len(alive_creeps) * 0.25)
 
@@ -163,6 +244,116 @@ class LanePressureCalculator:
     # ---------------------------------------------------------------------------
     # Internal helpers
     # ---------------------------------------------------------------------------
+
+    @staticmethod
+    def _raw_pressure(
+        centroid_x: float,
+        centroid_y: float,
+        own_frontline: BossSnapshot,
+        target: BossSnapshot,
+        lane_path: list[tuple[float, float]],
+    ) -> float:
+        """Compute raw pressure in [0, 1] for a centroid against a contested zone.
+
+        When `lane_path` has at least two waypoints, projects the centroid,
+        own frontline, and target onto the polyline and computes progress
+        within the contested zone. Otherwise falls back to the Euclidean
+        formula (used by degenerate test fixtures and any lanes where the
+        path could not be built).
+        """
+        if len(lane_path) >= 2:
+            centroid_prog, _ = _project_onto_path(centroid_x, centroid_y, lane_path)
+            own_prog, _ = _project_onto_path(own_frontline.x, own_frontline.y, lane_path)
+            target_prog, _ = _project_onto_path(target.x, target.y, lane_path)
+            zone_len = target_prog - own_prog
+            if zone_len > 0:
+                return _clamp((centroid_prog - own_prog) / zone_len, 0.0, 1.0)
+            # Degenerate: own_frontline projects past the target. Fall through
+            # to Euclidean rather than returning 0 so unit tests with a single
+            # own objective at/beyond the target still produce sensible values.
+
+        lane_length = _euclidean(own_frontline.x, own_frontline.y, target.x, target.y)
+        if lane_length == 0.0:
+            return 0.0
+        dist = _euclidean(centroid_x, centroid_y, target.x, target.y)
+        return _clamp(1.0 - dist / lane_length, 0.0, 1.0)
+
+    @staticmethod
+    def _build_lane_paths(
+        boss_data: BossData,
+    ) -> dict[tuple[int, int], list[tuple[float, float]]]:
+        """Build the static waypoint chain for each (lane, team) combination.
+
+        Waypoint order from the perspective of `team`:
+            own_patron -> own_base_guardian_midpoint -> own_walker -> own_guardian
+            -> enemy_guardian -> enemy_walker -> enemy_base_guardian_midpoint -> enemy_patron
+
+        Patrons sit at lane=0 (shared, not per-lane) and anchor both ends.
+        Base guardians come in pairs per lane per team; the pair is collapsed
+        to its midpoint to avoid double-counting.
+
+        Missing objectives are skipped rather than substituted. A path with
+        fewer than two surviving waypoints falls back to Euclidean at the
+        call site.
+        """
+        by_key: dict[tuple[int, int, int], list[BossSnapshot]] = {}
+        for s in boss_data.snapshots:
+            by_key.setdefault((s.team, s.lane, s.custom_id), []).append(s)
+
+        def single(team: int, lane: int, cid: int) -> Optional[tuple[float, float]]:
+            matches = by_key.get((team, lane, cid), [])
+            if not matches:
+                return None
+            return (matches[0].x, matches[0].y)
+
+        def midpoint(team: int, lane: int, cid: int) -> Optional[tuple[float, float]]:
+            matches = by_key.get((team, lane, cid), [])
+            if not matches:
+                return None
+            mean_x = sum(s.x for s in matches) / len(matches)
+            mean_y = sum(s.y for s in matches) / len(matches)
+            return (mean_x, mean_y)
+
+        paths: dict[tuple[int, int], list[tuple[float, float]]] = {}
+
+        # Lanes to build paths for: anything that has per-lane objectives.
+        lane_ids = {s.lane for s in boss_data.snapshots if s.lane != 0}
+
+        for team in (2, 3):
+            enemy = _ENEMY_TEAM[team]
+            own_patron = single(team, 0, _PATRON_CID)
+            enemy_patron = single(enemy, 0, _PATRON_CID)
+
+            for lane in lane_ids:
+                wp: list[tuple[float, float]] = []
+                if own_patron:
+                    wp.append(own_patron)
+                own_bg = midpoint(team, lane, _BASE_GUARDIAN_CID)
+                if own_bg:
+                    wp.append(own_bg)
+                own_walker = single(team, lane, _WALKER_CID)
+                if own_walker:
+                    wp.append(own_walker)
+                own_guardian = single(team, lane, _GUARDIAN_CID)
+                if own_guardian:
+                    wp.append(own_guardian)
+
+                enemy_guardian = single(enemy, lane, _GUARDIAN_CID)
+                if enemy_guardian:
+                    wp.append(enemy_guardian)
+                enemy_walker = single(enemy, lane, _WALKER_CID)
+                if enemy_walker:
+                    wp.append(enemy_walker)
+                enemy_bg = midpoint(enemy, lane, _BASE_GUARDIAN_CID)
+                if enemy_bg:
+                    wp.append(enemy_bg)
+                if enemy_patron:
+                    wp.append(enemy_patron)
+
+                if len(wp) >= 2:
+                    paths[(lane, team)] = wp
+
+        return paths
 
     @staticmethod
     def _build_objective_map(
