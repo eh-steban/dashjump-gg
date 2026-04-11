@@ -2,7 +2,10 @@
 
 Uses a real test DB (deadlock_test_db) via fixtures in test_helper.py.
 """
+from unittest.mock import AsyncMock
+
 import pytest
+from sqlalchemy.exc import IntegrityError
 from tests.test_helper import setup_database, async_session  # noqa: F401 (fixtures)
 from app.repo.parsed_matches_repo import ParsedMatchesRepo
 from app.domain.boss import BossData
@@ -95,3 +98,38 @@ class TestCreateParsedMatch:
         repo = ParsedMatchesRepo()
         result = await repo.get_match_data(99999, SCHEMA_VERSION, async_session)
         assert result is None
+
+    # ---------------------------------------------------------------------------
+    # PR-4: Concurrent-insert race -- IntegrityError is swallowed, not surfaced
+    # ---------------------------------------------------------------------------
+    #
+    # Regression: overlapping unique indexes on parsedmatch (PK on match_id +
+    # composite uq_match_id_schema_version) make ON CONFLICT arbiter selection
+    # non-deterministic when two requests race to insert the same match. The repo
+    # must treat the racing IntegrityError as "another request persisted first"
+    # rather than propagating a 500 to the caller. The next read still hits the
+    # row that was written by the winning request.
+    async def test_concurrent_race_integrity_error_is_swallowed(self):
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = IntegrityError(
+            statement="INSERT INTO parsedmatch ...",
+            params={},
+            orig=Exception(
+                'duplicate key value violates unique constraint "uq_match_id_schema_version"'
+            ),
+        )
+
+        repo = ParsedMatchesRepo()
+
+        # Must not raise -- the row was written by the winning concurrent request.
+        await repo.create_parsed_match(
+            match_id=99003,
+            schema_version=SCHEMA_VERSION,
+            raw_payload_gzip=b"gzip",
+            match_data=_match_data_dict(),
+            etag="etag",
+            session=mock_session,
+        )
+
+        mock_session.rollback.assert_awaited_once()
+        mock_session.commit.assert_not_awaited()

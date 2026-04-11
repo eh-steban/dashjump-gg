@@ -1,7 +1,7 @@
 from typing import Annotated, Optional
 from fastapi.params import Depends
 from sqlmodel import select
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.domain.match_analysis import TransformedMatchData
@@ -70,8 +70,12 @@ class ParsedMatchesRepo:
         session: Annotated[AsyncSession, Depends(get_db_session)],
     ) -> None:
         # Upsert: insert on first parse, overwrite on re-parse (e.g. after a parser fix).
-        # ON CONFLICT DO UPDATE avoids a unique-violation 500 on concurrent inserts and
-        # ensures re-parses always refresh the stored data.
+        # ON CONFLICT DO UPDATE targets the PK index. Concurrent racing inserts can
+        # still surface a UniqueViolation on the overlapping composite constraint
+        # `uq_match_id_schema_version` -- PG's arbiter check isn't deterministic when
+        # two unique indexes overlap, and whichever fires first wins. We treat that
+        # IntegrityError as "another request already persisted the row" (both races
+        # produce identical parse output, so either one wins safely).
         try:
             now = utcnow()
             stmt = pg_insert(ParsedMatch).values(
@@ -95,7 +99,19 @@ class ParsedMatchesRepo:
             )
             await session.execute(stmt)
             await session.commit()
+        except IntegrityError as e:
+            # Concurrent insert race: another request committed the same row while
+            # our speculative insert was in flight. The row is now in the DB with
+            # equivalent data, so the caller's next read will hit the cache.
+            await session.rollback()
+            minimal = getattr(e, "orig", None) or e.__class__.__name__
+            logger.info(
+                "Concurrent upsert race for match %s (another request persisted first): %s",
+                match_id,
+                minimal,
+            )
         except SQLAlchemyError as e:
+            await session.rollback()
             minimal = getattr(e, "orig", None)
             if minimal is None:
                 minimal = e.args[0] if e.args else e.__class__.__name__
