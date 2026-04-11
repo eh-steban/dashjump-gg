@@ -1,6 +1,6 @@
 //! Main replay parser - coordinates parsing of Deadlock demo files
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::BufReader;
 
@@ -50,6 +50,11 @@ struct MyVisitor {
     creep_tracker: CreepTracker,
     sinner_tracker: SinnerTracker,
     lane_data_updated: bool,
+    /// Serializer hashes for which we've already logged an "owned NPC attacker failed
+    /// to resolve to a player slot" error in this parse session. Used to dedupe the
+    /// warning so a new owned-NPC class shows up once per replay instead of once per
+    /// damage event.
+    warned_unresolvable_attacker_classes: HashSet<u64>,
 }
 
 impl Default for MyVisitor {
@@ -70,6 +75,7 @@ impl Default for MyVisitor {
             creep_tracker,
             sinner_tracker,
             lane_data_updated: false,
+            warned_unresolvable_attacker_classes: HashSet::new(),
         }
     }
 }
@@ -305,6 +311,59 @@ impl MyVisitor {
 
         Ok(())
     }
+
+    /// Resolve a damage-event attacker to the owning player's lobby slot.
+    ///
+    /// Handles two attacker shapes:
+    /// - Direct `CCitadelPlayerPawn` -- resolved via controller and lobby slot.
+    /// - NPC proxy owned by a player (Lil Helper, etc.) -- chases `m_hOwnerEntity`
+    ///   to the owner pawn, then resolves as above.
+    ///
+    /// Returns `None` for unowned attackers (troopers, neutral NPCs) where no
+    /// player slot can be attributed. In that case the caller should silently
+    /// skip any Dealt event -- kill attribution still fires via `record_damage`.
+    ///
+    /// If the attacker advertises an `m_hOwnerEntity` but the resulting chain
+    /// fails to yield a player slot, the attacker class is an owned NPC we do
+    /// not know how to resolve -- most likely a new owned-unit class shipped by
+    /// Valve. Emits an `error!` once per serializer hash per parse session so
+    /// we can extend `resolve_attacker_to_player_slot` and re-parse affected
+    /// replays to recover the missing Dealt events.
+    fn resolve_attacker_to_player_slot(
+        &mut self,
+        attacker: &Entity,
+        ctx: &Context,
+    ) -> Option<u32> {
+        if attacker.serializer_name_heq(CCITADELPLAYERPAWN_ENTITY) {
+            return resolve_pawn_to_slot(attacker.index(), ctx);
+        }
+        let owner_handle: u32 = attacker.get_value(&OWNER_ENTITY_KEY)?;
+        let owner_idx = ehandle_to_index(owner_handle);
+        let slot = resolve_pawn_to_slot(owner_idx, ctx);
+        if slot.is_none() {
+            let class_hash = attacker.serializer().serializer_name.hash;
+            if self
+                .warned_unresolvable_attacker_classes
+                .insert(class_hash)
+            {
+                error!(
+                    "[parse_replay] Owned NPC attacker could not be resolved to a player slot; \
+                     Sinner Dealt event skipped for this class. \
+                     class_hash=0x{:016x} attacker_entity_index={} owner_handle={} \
+                     owner_entity_index={} match_second={}. \
+                     If this represents a player-owned unit (new minion or ability summon), \
+                     extend MyVisitor::resolve_attacker_to_player_slot and re-parse affected \
+                     replays to recover the missing Dealt events.",
+                    class_hash,
+                    attacker.index(),
+                    owner_handle,
+                    owner_idx,
+                    self.current_match_second,
+                );
+            }
+        }
+        slot
+    }
 }
 
 /// Resolve a player pawn entity index to a lobby player slot.
@@ -320,22 +379,6 @@ fn resolve_pawn_to_slot(pawn_index: i32, ctx: &Context) -> Option<u32> {
     Some(slot)
 }
 
-/// Resolve a damage-event attacker to the owning player's lobby slot.
-///
-/// Handles two attacker shapes:
-/// - Direct `CCitadelPlayerPawn` -- resolved via controller and lobby slot.
-/// - NPC proxy owned by a player (Lil Helper, etc.) -- chases `m_hOwnerEntity`
-///   to the owner pawn, then resolves as above.
-///
-/// Returns `None` for unowned attackers (troopers, neutral NPCs) where no
-/// player slot can be attributed.
-fn resolve_attacker_to_player_slot(attacker: &Entity, ctx: &Context) -> Option<u32> {
-    if attacker.serializer_name_heq(CCITADELPLAYERPAWN_ENTITY) {
-        return resolve_pawn_to_slot(attacker.index(), ctx);
-    }
-    let owner_handle: u32 = attacker.get_value(&OWNER_ENTITY_KEY)?;
-    resolve_pawn_to_slot(ehandle_to_index(owner_handle), ctx)
-}
 
 impl Visitor for &mut MyVisitor {
     type Error = ParseError;
@@ -658,7 +701,7 @@ impl Visitor for &mut MyVisitor {
             // record_damage but produce no Dealt event.
             if self.sinner_tracker.is_tracked_sinner(victim_idx) {
                 self.sinner_tracker.record_damage(victim_idx, attacker_idx);
-                if let Some(slot) = resolve_attacker_to_player_slot(attacker, ctx) {
+                if let Some(slot) = self.resolve_attacker_to_player_slot(attacker, ctx) {
                     self.sinner_tracker.record_dealt_event(
                         victim_idx,
                         slot,
