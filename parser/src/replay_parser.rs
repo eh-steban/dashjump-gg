@@ -314,10 +314,27 @@ fn resolve_pawn_to_slot(pawn_index: i32, ctx: &Context) -> Option<u32> {
     let entities = ctx.entities()?;
     let pawn = entities.get(&pawn_index)?;
     let owner_handle: u32 = pawn.get_value(&OWNER_ENTITY_KEY).unwrap_or(0);
-    let controller_index = ehandle_to_index(owner_handle) as i32;
+    let controller_index = ehandle_to_index(owner_handle);
     let controller = entities.get(&controller_index)?;
     let slot: u32 = controller.get_value(&LOBBY_PLAYER_SLOT_KEY)?;
     Some(slot)
+}
+
+/// Resolve a damage-event attacker to the owning player's lobby slot.
+///
+/// Handles two attacker shapes:
+/// - Direct `CCitadelPlayerPawn` -- resolved via controller and lobby slot.
+/// - NPC proxy owned by a player (Lil Helper, etc.) -- chases `m_hOwnerEntity`
+///   to the owner pawn, then resolves as above.
+///
+/// Returns `None` for unowned attackers (troopers, neutral NPCs) where no
+/// player slot can be attributed.
+fn resolve_attacker_to_player_slot(attacker: &Entity, ctx: &Context) -> Option<u32> {
+    if attacker.serializer_name_heq(CCITADELPLAYERPAWN_ENTITY) {
+        return resolve_pawn_to_slot(attacker.index(), ctx);
+    }
+    let owner_handle: u32 = attacker.get_value(&OWNER_ENTITY_KEY)?;
+    resolve_pawn_to_slot(ehandle_to_index(owner_handle), ctx)
 }
 
 impl Visitor for &mut MyVisitor {
@@ -619,59 +636,55 @@ impl Visitor for &mut MyVisitor {
             let msg = CCitadelUserMessageDamage::decode(data)?;
             let entities = ctx.entities().unwrap();
 
-            let attacker = entities.get(&msg.entindex_attacker());
-            let victim = entities.get(&msg.entindex_victim());
+            let attacker_idx = msg.entindex_attacker();
+            let victim_idx = msg.entindex_victim();
+            let damage = msg.damage();
+            let match_time_s = self.current_match_second;
 
-            if attacker.is_none() || victim.is_none() {
+            let (Some(attacker), Some(victim)) =
+                (entities.get(&attacker_idx), entities.get(&victim_idx))
+            else {
                 return Ok(());
+            };
+
+            // Victim is a boss -- record health sample.
+            if self.boss_tracker.is_boss_entity(victim.serializer().serializer_name.hash) {
+                self.boss_tracker.record_boss_damage(victim_idx, ctx, match_time_s)?;
             }
 
-            // Check if victim is a boss and record health sample
-            let victim_hash = victim.unwrap().serializer().serializer_name.hash;
-            if self.boss_tracker.is_boss_entity(victim_hash) {
-                let match_time_s = self.current_match_second;
-                self.boss_tracker.record_boss_damage(
-                    msg.entindex_victim(),
-                    ctx,
-                    match_time_s,
-                )?;
-            }
-
-            // Player or Lil Helper hits sinner -- track last attacker for kill attribution
-            if self.sinner_tracker.is_tracked_sinner(msg.entindex_victim()) {
-                self.sinner_tracker.record_damage(
-                    msg.entindex_victim(),
-                    msg.entindex_attacker(),
-                );
-            }
-
-            // Sinner retaliates -- accumulate retaliation damage per player slot.
-            // Confirmed (lil-helper-sinner-interaction.md spike, replay 55841493):
-            // retaliation always targets a CCitadelPlayerPawn directly.
-            if self.sinner_tracker.is_tracked_sinner(msg.entindex_attacker()) {
-                if let Some(entities) = ctx.entities() {
-                    if let Some(victim_pawn) = entities.get(&msg.entindex_victim()) {
-                        if victim_pawn.serializer_name_heq(CCITADELPLAYERPAWN_ENTITY) {
-                            let owner_handle: u32 = victim_pawn
-                                .get_value(&OWNER_ENTITY_KEY)
-                                .unwrap_or(0);
-                            let controller_index = ehandle_to_index(owner_handle) as i32;
-                            if let Some(controller) = entities.get(&controller_index) {
-                                if let Some(slot) = controller.get_value::<u32>(&LOBBY_PLAYER_SLOT_KEY) {
-                                    self.sinner_tracker.record_retaliation(
-                                        msg.entindex_attacker(),
-                                        slot,
-                                        msg.damage(),
-                                    );
-                                }
-                            }
-                        }
-                    }
+            // Victim is a sinner -- track last attacker for kill attribution, and append
+            // a Dealt event when the attacker resolves to a player slot. Non-player
+            // attackers (troopers, unowned NPCs) still get kill attribution via
+            // record_damage but produce no Dealt event.
+            if self.sinner_tracker.is_tracked_sinner(victim_idx) {
+                self.sinner_tracker.record_damage(victim_idx, attacker_idx);
+                if let Some(slot) = resolve_attacker_to_player_slot(attacker, ctx) {
+                    self.sinner_tracker.record_dealt_event(
+                        victim_idx,
+                        slot,
+                        damage,
+                        match_time_s,
+                    );
                 }
             }
 
+            // Attacker is a sinner -- append a Retaliated event. Confirmed
+            // (lil-helper-sinner-interaction.md spike, replay 55841493): retaliation
+            // always targets a CCitadelPlayerPawn directly.
+            if self.sinner_tracker.is_tracked_sinner(attacker_idx)
+                && victim.serializer_name_heq(CCITADELPLAYERPAWN_ENTITY)
+                && let Some(slot) = resolve_pawn_to_slot(victim_idx, ctx)
+            {
+                self.sinner_tracker.record_retaliation(
+                    attacker_idx,
+                    slot,
+                    damage,
+                    match_time_s,
+                );
+            }
+
             let record = DamageRecord {
-                damage: msg.damage(),
+                damage,
                 pre_damage: msg.pre_damage(),
                 damage_type: msg.r#type(),
                 citadel_type: msg.citadel_type(),
@@ -690,9 +703,7 @@ impl Visitor for &mut MyVisitor {
                 health_lost: msg.health_lost(),
             };
 
-            if let Err(error) =
-                self.push_damage_record(ctx, attacker.unwrap(), victim.unwrap(), record)
-            {
+            if let Err(error) = self.push_damage_record(ctx, attacker, victim, record) {
                 error!("[parse_replay] Failed to push damage record: {:?}", error);
                 return Err(error.into());
             }

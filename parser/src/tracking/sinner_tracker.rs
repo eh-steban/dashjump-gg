@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::domain::SinnerSnapshot;
+use crate::domain::{SinnerDamageEvent, SinnerDamageKind, SinnerSnapshot};
 
 /// Tracks Sinner Sacrifice entities throughout the match.
 ///
@@ -52,6 +52,7 @@ impl SinnerTracker {
             time_alive_s: None,
             killer_player_slot: None,
             retaliation_damage: HashMap::new(),
+            damage_events: Vec::new(),
         });
     }
 
@@ -63,10 +64,19 @@ impl SinnerTracker {
         }
     }
 
-    /// Called on every damage event where the attacker is a sinner. Accumulates raw outgoing damage into the most recent snapshot for this sinner, keyed by the victim player's lobby slot. No-op if the entity index has never been tracked.
+    /// Called on every damage event where the attacker is a sinner. Accumulates raw outgoing damage into the most recent snapshot for this sinner, keyed by the victim player's lobby slot, AND appends a `Retaliated` event to the damage log. No-op if the entity index has never been tracked.
+    ///
+    /// The `retaliation_damage` HashMap accumulation is retained for backwards compatibility
+    /// with `PlayerCards.tsx` and will be removed once that component migrates to `damage_events`.
     ///
     /// Performance: the reverse scan is O(lives) where `lives` is the number of snapshots pushed for this entity index so far (typically 1-5 per match). Accepted as cheap relative to the per-damage hot path.
-    pub fn record_retaliation(&mut self, sinner_entity_index: i32, player_slot: u32, damage: i32) {
+    pub fn record_retaliation(
+        &mut self,
+        sinner_entity_index: i32,
+        player_slot: u32,
+        damage: i32,
+        time_s: u32,
+    ) {
         if !self.is_tracked_sinner(sinner_entity_index) {
             return;
         }
@@ -81,6 +91,45 @@ impl SinnerTracker {
                 .retaliation_damage
                 .entry(player_slot)
                 .or_insert(0) += damage;
+            snapshot.damage_events.push(SinnerDamageEvent {
+                time_s,
+                player_slot,
+                kind: SinnerDamageKind::Retaliated,
+                damage,
+            });
+        }
+    }
+
+    /// Appends a `Dealt` event to the current life's damage log for this sinner.
+    /// Caller resolves attacker entity -> player slot before calling (non-player attackers
+    /// like troopers or unowned NPCs should not call this method). No-op if the sinner
+    /// entity index is untracked. Uses the same reverse-scan routing as `record_retaliation`
+    /// so recycled entity indices route to the current life.
+    ///
+    /// Note: this method does NOT touch `retaliation_damage`. The event log is the sole
+    /// source of truth for dealt damage; consumers aggregate via filter+group+sum.
+    pub fn record_dealt_event(
+        &mut self,
+        sinner_entity_index: i32,
+        attacker_slot: u32,
+        damage: i32,
+        time_s: u32,
+    ) {
+        if !self.is_tracked_sinner(sinner_entity_index) {
+            return;
+        }
+        if let Some(snapshot) = self
+            .snapshots
+            .iter_mut()
+            .rev()
+            .find(|s| s.entity_index == sinner_entity_index)
+        {
+            snapshot.damage_events.push(SinnerDamageEvent {
+                time_s,
+                player_slot: attacker_slot,
+                kind: SinnerDamageKind::Dealt,
+                damage,
+            });
         }
     }
 

@@ -10,4 +10,4 @@ pub use boss::BossSnapshot;
 pub use creep::{CreepSnapshot, CreepTimeline, LaneCreepData, WaveMeta};
 pub use damage::DamageRecord;
 pub use player::{Player, PlayerPosition};
-pub use sinner::SinnerSnapshot;
+pub use sinner::{SinnerDamageEvent, SinnerDamageKind, SinnerSnapshot};
