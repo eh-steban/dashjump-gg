@@ -16,6 +16,7 @@ import { ScaledSinnerSnapshot } from '../domain/sinner';
 import { useMatchAnalysis } from '../hooks/UseMatchAnalysis';
 import PrintHeroImageData from '../components/matchAnalysis/PrintHeroImageData';
 import { formatSecondstoMMSS } from '../utils/time';
+import { scaleSnapshots } from '../utils/minimap';
 
 import {
   defaultMatchAnalysis,
@@ -163,20 +164,12 @@ const MatchAnalysis = () => {
   }, [perPlayerData, currentTick]);
 
   const scaledBossSnapshots: ScaledBossSnapshot[] = useMemo(
-    () =>
-      bossSnapshots.map((snapshot) => ({
-        ...snapshot,
-        ...worldToMinimapPixels(snapshot.x, snapshot.y),
-      })),
+    () => scaleSnapshots(bossSnapshots, worldToMinimapPixels),
     [bossSnapshots]
   );
 
   const scaledSinnerSnapshots: ScaledSinnerSnapshot[] = useMemo(
-    () =>
-      sinnerSnapshots.map((snapshot) => ({
-        ...snapshot,
-        ...worldToMinimapPixels(snapshot.x, snapshot.y),
-      })),
+    () => scaleSnapshots(sinnerSnapshots, worldToMinimapPixels),
     [sinnerSnapshots]
   );
 

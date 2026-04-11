@@ -6,7 +6,7 @@ interface SinnerLayerProps {
   currentSec: number;
 }
 
-const ICON_SIZE = 28; // px -- adjust if the icon looks too large or small on the 768px minimap
+export const ICON_SIZE = 28; // px -- adjust if the icon looks too large or small on the 768px minimap
 
 const SinnerLayer = ({ scaledSinnerSnapshots, currentSec }: SinnerLayerProps) => {
   const alive = scaledSinnerSnapshots.filter(

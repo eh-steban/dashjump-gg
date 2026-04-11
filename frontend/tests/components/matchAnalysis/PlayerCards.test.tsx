@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page } from 'vitest/browser';
 import PlayerCards from '../../../src/components/matchAnalysis/PlayerCards';
@@ -79,6 +79,15 @@ const defaultProps = (
   sinners,
 });
 
+// Read the full rendered text of the "Sinner damage taken:" line on the first player
+// card. The value span is the next text node after the <strong> label, so trimming
+// the container's textContent gives us "Sinner damage taken: <value>".
+function sinnerDamageLineText(): string {
+  const label = page.getByText('Sinner damage taken:').element();
+  const container = label.parentElement;
+  return container?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+}
+
 // --------------------------------------------------------------------------
 // Tests: Sinner damage taken display
 // --------------------------------------------------------------------------
@@ -97,7 +106,7 @@ describe('PlayerCards -- sinner damage taken', () => {
     await expect.element(page.getByText('480')).toBeInTheDocument();
   });
 
-  it('renders a muted 0 when the player slot is absent from all retaliation_damage maps', async () => {
+  it('renders 0 when the player slot is absent from all retaliation_damage maps', async () => {
     const player = makePlayer(5);
     const sinners = [
       makeSinnerSnapshot({ '2': 160 }),
@@ -106,10 +115,7 @@ describe('PlayerCards -- sinner damage taken', () => {
 
     render(<PlayerCards {...defaultProps([player], sinners)} />);
 
-    // Find all text-gray-400 spans and verify one contains exactly '0'
-    const graySpans = document.querySelectorAll('span.text-gray-400');
-    const zeroSpan = Array.from(graySpans).find((el) => el.textContent === '0');
-    expect(zeroSpan).not.toBeUndefined();
+    expect(sinnerDamageLineText()).toBe('Sinner damage taken: 0');
   });
 
   it('renders 0 when sinners array is empty', async () => {
@@ -117,9 +123,7 @@ describe('PlayerCards -- sinner damage taken', () => {
 
     render(<PlayerCards {...defaultProps([player], [])} />);
 
-    const graySpans = document.querySelectorAll('span.text-gray-400');
-    const zeroSpan = Array.from(graySpans).find((el) => el.textContent === '0');
-    expect(zeroSpan).not.toBeUndefined();
+    expect(sinnerDamageLineText()).toBe('Sinner damage taken: 0');
   });
 
   it('sums multiple sinners that each have damage for the same slot', async () => {
@@ -154,16 +158,12 @@ describe('PlayerCards -- sinner damage taken', () => {
     await expect.element(page.getByText('Sinner damage taken:')).toBeInTheDocument();
   });
 
-  it('does not show damage > 0 as muted -- renders as plain number', async () => {
+  it('renders positive damage alongside the label as plain text', async () => {
     const player = makePlayer(4);
     const sinners = [makeSinnerSnapshot({ '4': 500 })];
 
     render(<PlayerCards {...defaultProps([player], sinners)} />);
 
-    // The number 500 should appear without the gray muted class
-    const muted = document.querySelector('.text-gray-400');
-    // muted element should not contain 500
-    expect(muted?.textContent).not.toBe('500');
-    await expect.element(page.getByText('500')).toBeInTheDocument();
+    expect(sinnerDamageLineText()).toBe('Sinner damage taken: 500');
   });
 });
