@@ -3,17 +3,20 @@
 Computes per-wave, per-second pressure by projecting the creep centroid onto
 the static waypoint chain that defines each lane's physical path. Lanes 1 and 6
 bend sharply near the base (guardian is horizontal midfield; base guardian is
-vertical near the base), so straight-line Euclidean distance from centroid to
-target understates progress when creeps sit in the bend. Path projection along
-the waypoint chain corrects that.
+vertical near the base), so a straight-line distance from centroid to target
+understates progress when creeps sit in the bend. Path projection along the
+waypoint chain corrects that.
 
 Formula per second:
   centroid           = mean position of alive creeps in wave
-  target             = nearest alive enemy objective (Guardian -> Walker -> ... -> Patron)
-  own_frontline      = nearest alive own objective (same priority ordering, own team)
-  lane_path          = static polyline
-                       [own_patron, own_base_guard_midpoint, own_walker, own_guardian,
-                        enemy_guardian, enemy_walker, enemy_base_guard_midpoint, enemy_patron]
+  target             = lowest-priority alive enemy objective along the chain
+                       Guardian -> Walker -> Base Guardian -> Shrine -> Patron
+  own_frontline      = same chain, own team
+  lane_path          = static polyline built per (lane, team):
+                       [own_patron, own_shrine, own_bg_midpoint, own_walker, own_guardian,
+                        enemy_guardian, enemy_walker, enemy_bg_midpoint, enemy_shrine, enemy_patron]
+                       Outer lanes use the same-side shrine as the shrine waypoint;
+                       the middle lane uses the midpoint of both shrines.
   centroid_progress  = cumulative distance from own_patron to the nearest projection
                        of centroid onto the polyline
   own_frontline_prog = same projection applied to own_frontline
@@ -22,11 +25,14 @@ Formula per second:
   raw_pressure       = clamp((centroid_progress - own_frontline_prog) / contested_zone_len, 0, 1)
   pressure           = raw_pressure * (alive_creep_count * 0.25)
 
-When the lane path cannot be built (degenerate boss data -- e.g. tests with only
-two guardians), the calculation falls back to the original
-`1 - euclidean(centroid, target) / euclidean(own_frontline, target)` formula. Both
-formulas agree on straight lanes; the path variant is only meaningfully different
-on lanes with a bend.
+There is always an enemy objective to calculate against -- once the lane's Base
+Guardian dies the chain advances to Shrine and then Patron, both of which are
+lane=0 but are appended to every per-lane objective list so target selection and
+path construction can reach them. If the waypoint chain cannot be built (fewer
+than 2 waypoints) or the contested zone is degenerate (own_frontline projects
+past target on the path), the calculation logs an ERROR and returns None so the
+snapshot shows as missing rather than as a confident zero. There is no silent
+fallback -- any degradation is visible in logs and in the output.
 
 Ghost creep filtering note:
   The parser's CreepTracker already suppresses dead and ghost entities at the snapshot
@@ -83,11 +89,13 @@ _BOSS_PRIORITY: dict[int, int] = {
 # team 2's enemy is team 3, and team 3's enemy is team 2
 _ENEMY_TEAM: dict[int, int] = {2: 3, 3: 2}
 
-
-def _euclidean(x1: float, y1: float, x2: float, y2: float) -> float:
-    dx = x1 - x2
-    dy = y1 - y2
-    return math.sqrt(dx * dx + dy * dy)
+# Middle-lane tolerance. A lane whose Base Guardian midpoint x-coordinate is
+# within this many world units of the map center (x=0) is treated as a "middle
+# lane" for shrine-waypoint selection, and both shrines collapse to their
+# midpoint. Outer lanes use the same-side shrine instead.
+# 500 is ~3% of the map's x-extent (~16000 world units) and comfortably separates
+# the observed middle-lane BG pair (~|x|=208) from the outer-lane pairs (|x|=1760).
+_MIDDLE_LANE_X_TOLERANCE: float = 500.0
 
 
 def _clamp(value: float, lo: float, hi: float) -> float:
@@ -194,6 +202,23 @@ class LanePressureCalculator:
             if timeline_length == 0:
                 continue
 
+            if not own_objectives or not enemy_objectives or len(lane_path) < 2:
+                logger.error(
+                    "Wave %s declares lane=%d team=%d but the objective map "
+                    "or lane path is empty (own=%d enemy=%d waypoints=%d). "
+                    "Emitting None snapshots for every second. Check that the "
+                    "parser output covers this lane and that boss_name_hash "
+                    "values match the BOSS_HASH_* constants.",
+                    wave_id,
+                    lane,
+                    team,
+                    len(own_objectives),
+                    len(enemy_objectives),
+                    len(lane_path),
+                )
+                pressure_timeline[wave_id] = [None] * timeline_length
+                continue
+
             snapshots: list[Optional[LanePressureSnapshot]] = []
 
             for second in range(timeline_length):
@@ -222,7 +247,15 @@ class LanePressureCalculator:
                     own_frontline=own_frontline,
                     target=target,
                     lane_path=lane_path,
+                    wave_id=wave_id,
+                    second=second,
                 )
+
+                if raw_pressure is None:
+                    # _raw_pressure already logged the problem. Emit a None
+                    # snapshot so consumers see missing data, not a confident 0.
+                    snapshots.append(None)
+                    continue
 
                 pressure = raw_pressure * (len(alive_creeps) * 0.25)
 
@@ -264,31 +297,56 @@ class LanePressureCalculator:
         own_frontline: BossSnapshot,
         target: BossSnapshot,
         lane_path: list[tuple[float, float]],
-    ) -> float:
-        """Compute raw pressure in [0, 1] for a centroid against a contested zone.
+        wave_id: str,
+        second: int,
+    ) -> Optional[float]:
+        """Compute raw pressure in [0, 1] for a centroid against the contested
+        zone along the lane path.
 
-        When `lane_path` has at least two waypoints, projects the centroid,
-        own frontline, and target onto the polyline and computes progress
-        within the contested zone. Otherwise falls back to the Euclidean
-        formula (used by degenerate test fixtures and any lanes where the
-        path could not be built).
+        Returns None on degraded input, after logging an ERROR with enough
+        context to diagnose the problem. Two degradation cases:
+
+        1. The waypoint polyline has fewer than two points. This means
+           `_build_lane_paths` could not find enough objectives for this
+           (lane, team) -- a parser or objective-map bug.
+        2. The own_frontline projects on or past the target along the path.
+           This means the priority chain is inconsistent with the geometry,
+           or both sides of the lane are exhausted -- a priority-map bug.
+
+        There is no silent fallback. Callers must treat a None return as a
+        missing snapshot.
         """
-        if len(lane_path) >= 2:
-            centroid_prog, _ = _project_onto_path(centroid_x, centroid_y, lane_path)
-            own_prog, _ = _project_onto_path(own_frontline.x, own_frontline.y, lane_path)
-            target_prog, _ = _project_onto_path(target.x, target.y, lane_path)
-            zone_len = target_prog - own_prog
-            if zone_len > 0:
-                return _clamp((centroid_prog - own_prog) / zone_len, 0.0, 1.0)
-            # Degenerate: own_frontline projects past the target. Fall through
-            # to Euclidean rather than returning 0 so unit tests with a single
-            # own objective at/beyond the target still produce sensible values.
+        if len(lane_path) < 2:
+            logger.error(
+                "Degraded lane path for wave=%s second=%d: only %d waypoint(s). "
+                "Check _build_lane_paths output -- the parser should emit "
+                "guardian/walker/base_guardian/shrine/patron for every active lane.",
+                wave_id,
+                second,
+                len(lane_path),
+            )
+            return None
 
-        lane_length = _euclidean(own_frontline.x, own_frontline.y, target.x, target.y)
-        if lane_length == 0.0:
-            return 0.0
-        dist = _euclidean(centroid_x, centroid_y, target.x, target.y)
-        return _clamp(1.0 - dist / lane_length, 0.0, 1.0)
+        centroid_prog, _ = _project_onto_path(centroid_x, centroid_y, lane_path)
+        own_prog, _ = _project_onto_path(own_frontline.x, own_frontline.y, lane_path)
+        target_prog, _ = _project_onto_path(target.x, target.y, lane_path)
+        zone_len = target_prog - own_prog
+
+        if zone_len <= 0:
+            logger.error(
+                "Degenerate contested zone for wave=%s second=%d: "
+                "own_frontline(hash=%d) progresses %.0f >= target(hash=%d) progresses %.0f. "
+                "Check _BOSS_PRIORITY ordering and lane path waypoint order.",
+                wave_id,
+                second,
+                own_frontline.boss_name_hash,
+                own_prog,
+                target.boss_name_hash,
+                target_prog,
+            )
+            return None
+
+        return _clamp((centroid_prog - own_prog) / zone_len, 0.0, 1.0)
 
     @staticmethod
     def _build_lane_paths(
@@ -297,19 +355,31 @@ class LanePressureCalculator:
         """Build the static waypoint chain for each (lane, team) combination.
 
         Waypoint order from the perspective of `team`:
-            own_patron -> own_base_guardian_midpoint -> own_walker -> own_guardian
-            -> enemy_guardian -> enemy_walker -> enemy_base_guardian_midpoint -> enemy_patron
+
+            own_patron -> own_shrine -> own_base_guardian_midpoint
+              -> own_walker -> own_guardian
+              -> enemy_guardian -> enemy_walker
+              -> enemy_base_guardian_midpoint -> enemy_shrine -> enemy_patron
 
         Patrons sit at lane=0 (shared, not per-lane) and anchor both ends.
         Base guardians come in pairs per lane per team; the pair is collapsed
-        to its midpoint to avoid double-counting.
+        to its midpoint. Shrines sit at lane=0 with two per team on either
+        side of the base centerline -- for outer lanes the waypoint is the
+        same-side shrine, for middle lanes it is the midpoint of both shrines
+        (see `_MIDDLE_LANE_X_TOLERANCE`).
 
-        Missing objectives are skipped rather than substituted. A path with
-        fewer than two surviving waypoints falls back to Euclidean at the
-        call site.
+        A path must have at least two waypoints to be usable at the call site.
         """
         by_key: dict[tuple[int, int, int], list[BossSnapshot]] = {}
+        shrines_by_team: dict[int, list[BossSnapshot]] = {}
+        patron_by_team: dict[int, BossSnapshot] = {}
         for s in boss_data.snapshots:
+            if s.boss_name_hash == BOSS_HASH_SHRINE:
+                shrines_by_team.setdefault(s.team, []).append(s)
+                continue
+            if s.boss_name_hash == BOSS_HASH_PATRON:
+                patron_by_team[s.team] = s
+                continue
             by_key.setdefault((s.team, s.lane, s.boss_name_hash), []).append(s)
 
         def single(team: int, lane: int, hash_: int) -> Optional[tuple[float, float]]:
@@ -326,6 +396,53 @@ class LanePressureCalculator:
             mean_y = sum(s.y for s in matches) / len(matches)
             return (mean_x, mean_y)
 
+        def shrine_waypoint(
+            team: int,
+            lane_bg: Optional[tuple[float, float]],
+        ) -> Optional[tuple[float, float]]:
+            """Pick the shrine waypoint for a given team and lane BG midpoint.
+
+            Outer lane (|bg_mid_x| >= tolerance): use the shrine on the same
+                side of the map (same x-sign as bg_mid_x). If no same-side
+                shrine exists, log a warning and fall back to the nearest one.
+            Middle lane (|bg_mid_x| < tolerance): use the midpoint of all
+                shrines on that team.
+            """
+            shrines = shrines_by_team.get(team, [])
+            if not shrines:
+                return None
+            if lane_bg is None:
+                # No BG to orient against; fall back to shrine midpoint.
+                mx = sum(s.x for s in shrines) / len(shrines)
+                my = sum(s.y for s in shrines) / len(shrines)
+                return (mx, my)
+
+            bg_x = lane_bg[0]
+            if abs(bg_x) < _MIDDLE_LANE_X_TOLERANCE:
+                mx = sum(s.x for s in shrines) / len(shrines)
+                my = sum(s.y for s in shrines) / len(shrines)
+                return (mx, my)
+
+            same_side = [s for s in shrines if (s.x * bg_x) > 0]
+            if same_side:
+                if len(same_side) == 1:
+                    return (same_side[0].x, same_side[0].y)
+                mx = sum(s.x for s in same_side) / len(same_side)
+                my = sum(s.y for s in same_side) / len(same_side)
+                return (mx, my)
+
+            # No same-side shrine -- unusual layout. Log and use the nearest.
+            logger.warning(
+                "No same-side shrine for team=%d bg_mid_x=%.0f; using nearest",
+                team,
+                bg_x,
+            )
+            nearest = min(
+                shrines,
+                key=lambda s: (s.x - bg_x) ** 2 + (s.y - lane_bg[1]) ** 2,
+            )
+            return (nearest.x, nearest.y)
+
         paths: dict[tuple[int, int], list[tuple[float, float]]] = {}
 
         # Lanes to build paths for: anything that has per-lane objectives.
@@ -333,32 +450,46 @@ class LanePressureCalculator:
 
         for team in (2, 3):
             enemy = _ENEMY_TEAM[team]
-            own_patron = single(team, 0, BOSS_HASH_PATRON)
-            enemy_patron = single(enemy, 0, BOSS_HASH_PATRON)
+            own_patron = (
+                (patron_by_team[team].x, patron_by_team[team].y)
+                if team in patron_by_team
+                else None
+            )
+            enemy_patron = (
+                (patron_by_team[enemy].x, patron_by_team[enemy].y)
+                if enemy in patron_by_team
+                else None
+            )
 
             for lane in lane_ids:
+                own_bg = midpoint(team, lane, BOSS_HASH_BASE_GUARDIAN)
+                enemy_bg = midpoint(enemy, lane, BOSS_HASH_BASE_GUARDIAN)
+                own_shrine = shrine_waypoint(team, own_bg)
+                enemy_shrine = shrine_waypoint(enemy, enemy_bg)
+                own_walker = single(team, lane, BOSS_HASH_WALKER)
+                own_guardian = single(team, lane, BOSS_HASH_GUARDIAN)
+                enemy_guardian = single(enemy, lane, BOSS_HASH_GUARDIAN)
+                enemy_walker = single(enemy, lane, BOSS_HASH_WALKER)
+
                 wp: list[tuple[float, float]] = []
                 if own_patron:
                     wp.append(own_patron)
-                own_bg = midpoint(team, lane, BOSS_HASH_BASE_GUARDIAN)
+                if own_shrine:
+                    wp.append(own_shrine)
                 if own_bg:
                     wp.append(own_bg)
-                own_walker = single(team, lane, BOSS_HASH_WALKER)
                 if own_walker:
                     wp.append(own_walker)
-                own_guardian = single(team, lane, BOSS_HASH_GUARDIAN)
                 if own_guardian:
                     wp.append(own_guardian)
-
-                enemy_guardian = single(enemy, lane, BOSS_HASH_GUARDIAN)
                 if enemy_guardian:
                     wp.append(enemy_guardian)
-                enemy_walker = single(enemy, lane, BOSS_HASH_WALKER)
                 if enemy_walker:
                     wp.append(enemy_walker)
-                enemy_bg = midpoint(enemy, lane, BOSS_HASH_BASE_GUARDIAN)
                 if enemy_bg:
                     wp.append(enemy_bg)
+                if enemy_shrine:
+                    wp.append(enemy_shrine)
                 if enemy_patron:
                     wp.append(enemy_patron)
 
@@ -371,19 +502,71 @@ class LanePressureCalculator:
     def _build_objective_map(
         boss_data: BossData,
     ) -> dict[tuple[int, int], list[BossSnapshot]]:
-        """Build lookup: (lane, team) -> BossSnapshots sorted by attack priority."""
-        objective_map: dict[tuple[int, int], list[BossSnapshot]] = {}
+        """Build lookup: (lane, team) -> BossSnapshots sorted by attack priority.
+
+        Lane-scoped objectives (Guardian, Walker, Base Guardian) are grouped
+        by their declared (lane, team). The shared-objective pair -- Shrines
+        and Patron -- sit at lane=0 but are still valid targets for any lane
+        once that lane's Base Guardian dies. They are appended to every
+        per-lane bucket here:
+
+        - Patron: always appended.
+        - Shrines: lane-relevant only. Outer lanes (|bg_mid_x| >= tolerance)
+          get the same-side shrine(s); middle lanes get all shrines.
+
+        Sorted by `_BOSS_PRIORITY` keyed on `boss_name_hash` so
+        `_current_target` walks the correct attack order.
+        """
+        lane_scoped: dict[tuple[int, int], list[BossSnapshot]] = {}
+        shrines_by_team: dict[int, list[BossSnapshot]] = {}
+        patron_by_team: dict[int, BossSnapshot] = {}
 
         for snap in boss_data.snapshots:
-            key = (snap.lane, snap.team)
-            objective_map.setdefault(key, []).append(snap)
+            if snap.boss_name_hash == BOSS_HASH_SHRINE:
+                shrines_by_team.setdefault(snap.team, []).append(snap)
+                continue
+            if snap.boss_name_hash == BOSS_HASH_PATRON:
+                patron_by_team[snap.team] = snap
+                continue
+            # Guardian / Walker / Base Guardian -- lane-scoped.
+            lane_scoped.setdefault((snap.lane, snap.team), []).append(snap)
 
-        # Sort each bucket by attack priority. Priority is keyed on boss_name_hash
-        # (u64 fxhash from parser/src/entities/constants.rs), not custom_id.
-        for key in objective_map:
-            objective_map[key].sort(
+        def relevant_shrines(
+            team: int, bg_xs: list[float]
+        ) -> list[BossSnapshot]:
+            shrines = shrines_by_team.get(team, [])
+            if not shrines:
+                return []
+            if not bg_xs:
+                return list(shrines)
+            bg_mid_x = sum(bg_xs) / len(bg_xs)
+            if abs(bg_mid_x) < _MIDDLE_LANE_X_TOLERANCE:
+                return list(shrines)
+            same_side = [s for s in shrines if (s.x * bg_mid_x) > 0]
+            return same_side if same_side else list(shrines)
+
+        objective_map: dict[tuple[int, int], list[BossSnapshot]] = {}
+        for (lane, team), objectives in lane_scoped.items():
+            if lane == 0:
+                # Bosses whose declared lane is 0 should not form per-lane
+                # buckets (they are shared). Drop these -- shrines and patron
+                # were already pulled out above; anything else here is a bug.
+                continue
+
+            bucket = list(objectives)
+            bg_xs = [
+                o.x
+                for o in bucket
+                if o.boss_name_hash == BOSS_HASH_BASE_GUARDIAN
+            ]
+            bucket.extend(relevant_shrines(team, bg_xs))
+            if team in patron_by_team:
+                bucket.append(patron_by_team[team])
+
+            bucket.sort(
                 key=lambda s: _BOSS_PRIORITY.get(s.boss_name_hash, 99)
             )
+            objective_map[(lane, team)] = bucket
 
         return objective_map
 
