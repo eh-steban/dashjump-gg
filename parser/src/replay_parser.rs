@@ -1,6 +1,6 @@
 //! Main replay parser - coordinates parsing of Deadlock demo files
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::BufReader;
 
@@ -14,12 +14,13 @@ use haste::valveprotos::deadlock::{
     CitadelUserMessageIds,
 };
 use prost::Message;
-use tracing::{error, info};
+use tracing::{debug, error, info, warn};
 
 use crate::domain::{DamageRecord, Player, PlayerPosition};
 // Note: CreepSnapshot, LaneCreepData etc. are used via CreepTracker::get_output()
 use crate::entities::constants::*;
-use crate::tracking::{BossTracker, CreepTracker};
+use crate::entities::constants::MAX_HEALTH_KEY;
+use crate::tracking::{BossTracker, CreepTracker, SinnerTracker};
 use crate::utils::{get_entity_position, get_steam_id32};
 
 /// Thin error wrapper for the Visitor boundary.
@@ -47,13 +48,20 @@ struct MyVisitor {
     positions: Vec<Vec<PlayerPosition>>,
     boss_tracker: BossTracker,
     creep_tracker: CreepTracker,
+    sinner_tracker: SinnerTracker,
     lane_data_updated: bool,
+    /// Serializer hashes for which we've already logged an "owned NPC attacker failed
+    /// to resolve to a player slot" error in this parse session. Used to dedupe the
+    /// warning so a new owned-NPC class shows up once per replay instead of once per
+    /// damage event.
+    warned_unresolvable_attacker_classes: HashSet<u64>,
 }
 
 impl Default for MyVisitor {
     fn default() -> Self {
         let boss_tracker = BossTracker::new();
         let creep_tracker = CreepTracker::new(boss_tracker.lane_key());
+        let sinner_tracker = SinnerTracker::new();
         Self {
             current_match_second: 0,
             match_start_time_s: None,
@@ -65,7 +73,9 @@ impl Default for MyVisitor {
             positions: Vec::new(),
             boss_tracker,
             creep_tracker,
+            sinner_tracker,
             lane_data_updated: false,
+            warned_unresolvable_attacker_classes: HashSet::new(),
         }
     }
 }
@@ -83,6 +93,7 @@ impl MyVisitor {
             "positions": self.positions,
             "bosses": self.boss_tracker.get_output(),
             "lane_creep_data": lane_creep_data,
+            "sinners": self.sinner_tracker.get_output(),
         })
     }
 
@@ -145,10 +156,16 @@ impl MyVisitor {
                 | CNPC_BARRACKBOSS_ENTITY
                 | CNPC_BOSS_TIER2_ENTITY
                 | CNPC_BOSS_TIER3_ENTITY
-                | CNPC_NEUTRAL_SINNERSSACRIFICE_ENTITY
                 | CNPC_BASE_DEFENSE_SENTRY_ENTITY
                 | CNPC_SHIELDEDSENTRY_ENTITY
         )
+    }
+
+    /// Check if entity needs a one-time position snapshot at CREATE.
+    /// Used for stationary objectives that do not require per-second tracking.
+    fn should_track_snapshot(&self, entity: &Entity) -> bool {
+        let hash = entity.serializer().serializer_name.hash;
+        matches!(hash, CNPC_NEUTRAL_SINNERSSACRIFICE_ENTITY)
     }
 
     /// Check if entity is an NPC (not a player pawn)
@@ -294,7 +311,74 @@ impl MyVisitor {
 
         Ok(())
     }
+
+    /// Resolve a damage-event attacker to the owning player's lobby slot.
+    ///
+    /// Handles two attacker shapes:
+    /// - Direct `CCitadelPlayerPawn` -- resolved via controller and lobby slot.
+    /// - NPC proxy owned by a player (Lil Helper, etc.) -- chases `m_hOwnerEntity`
+    ///   to the owner pawn, then resolves as above.
+    ///
+    /// Returns `None` for unowned attackers (troopers, neutral NPCs) where no
+    /// player slot can be attributed. In that case the caller should silently
+    /// skip any Dealt event -- kill attribution still fires via `record_damage`.
+    ///
+    /// If the attacker advertises an `m_hOwnerEntity` but the resulting chain
+    /// fails to yield a player slot, the attacker class is an owned NPC we do
+    /// not know how to resolve -- most likely a new owned-unit class shipped by
+    /// Valve. Emits an `error!` once per serializer hash per parse session so
+    /// we can extend `resolve_attacker_to_player_slot` and re-parse affected
+    /// replays to recover the missing Dealt events.
+    fn resolve_attacker_to_player_slot(
+        &mut self,
+        attacker: &Entity,
+        ctx: &Context,
+    ) -> Option<u32> {
+        if attacker.serializer_name_heq(CCITADELPLAYERPAWN_ENTITY) {
+            return resolve_pawn_to_slot(attacker.index(), ctx);
+        }
+        let owner_handle: u32 = attacker.get_value(&OWNER_ENTITY_KEY)?;
+        let owner_idx = ehandle_to_index(owner_handle);
+        let slot = resolve_pawn_to_slot(owner_idx, ctx);
+        if slot.is_none() {
+            let class_hash = attacker.serializer().serializer_name.hash;
+            if self
+                .warned_unresolvable_attacker_classes
+                .insert(class_hash)
+            {
+                error!(
+                    "[parse_replay] Owned NPC attacker could not be resolved to a player slot; \
+                     Sinner Dealt event skipped for this class. \
+                     class_hash=0x{:016x} attacker_entity_index={} owner_handle={} \
+                     owner_entity_index={} match_second={}. \
+                     If this represents a player-owned unit (new minion or ability summon), \
+                     extend MyVisitor::resolve_attacker_to_player_slot and re-parse affected \
+                     replays to recover the missing Dealt events.",
+                    class_hash,
+                    attacker.index(),
+                    owner_handle,
+                    owner_idx,
+                    self.current_match_second,
+                );
+            }
+        }
+        slot
+    }
 }
+
+/// Resolve a player pawn entity index to a lobby player slot.
+/// Walks the pawn -> controller -> m_unLobbyPlayerSlot chain.
+/// Returns `None` if any step of the chain is absent.
+fn resolve_pawn_to_slot(pawn_index: i32, ctx: &Context) -> Option<u32> {
+    let entities = ctx.entities()?;
+    let pawn = entities.get(&pawn_index)?;
+    let owner_handle: u32 = pawn.get_value(&OWNER_ENTITY_KEY).unwrap_or(0);
+    let controller_index = ehandle_to_index(owner_handle);
+    let controller = entities.get(&controller_index)?;
+    let slot: u32 = controller.get_value(&LOBBY_PLAYER_SLOT_KEY)?;
+    Some(slot)
+}
+
 
 impl Visitor for &mut MyVisitor {
     type Error = ParseError;
@@ -449,6 +533,27 @@ impl Visitor for &mut MyVisitor {
                         );
                     }
                 }
+                if match_started && self.should_track_snapshot(entity) {
+                    let Some(position) = get_entity_position(entity) else {
+                        error!(
+                            "[parse_replay] sinner entity has no position on CREATE (bug): Index={}",
+                            entity.index()
+                        );
+                        return Ok(());
+                    };
+                    let max_health: i32 = entity
+                        .get_value::<i32>(&MAX_HEALTH_KEY)
+                        .unwrap_or(500);
+                    let match_time_s = self.current_match_second;
+                    self.sinner_tracker.handle_sinner_create(
+                        entity.index(),
+                        position[0],
+                        position[1],
+                        position[2],
+                        max_health,
+                        match_time_s,
+                    );
+                }
             }
             DeltaHeader::DELETE => {
                 let match_time_s = self.current_match_second;
@@ -510,6 +615,54 @@ impl Visitor for &mut MyVisitor {
                         health,
                     );
                 }
+                if match_started && hash == CNPC_NEUTRAL_SINNERSSACRIFICE_ENTITY {
+                    if let Some(health) = entity.get_value::<i32>(&HEALTH_KEY) {
+                        let match_time_s = self.current_match_second;
+                        if let Some(attacker_entity_index) = self.sinner_tracker
+                            .handle_sinner_update(entity.index(), health, match_time_s)
+                        {
+                            // Death detected -- resolve attacker entity index to lobby player slot.
+                            // A6.5 defensive fallback: if the attacker is not a player pawn,
+                            // attempt m_hOwnerEntity resolution (handles potential Lil Helper case).
+                            let attacker_index = attacker_entity_index;
+                            let attacker_entity = ctx
+                                .entities()
+                                .and_then(|e| e.get(&attacker_index));
+                            let attacker_hash = attacker_entity
+                                .map(|e| e.serializer().serializer_name.hash);
+
+                            let killer_slot = match attacker_hash {
+                                Some(h) if h == CCITADELPLAYERPAWN_ENTITY => {
+                                    // Normal path: attacker is a player pawn
+                                    resolve_pawn_to_slot(attacker_index, ctx)
+                                }
+                                Some(_) => {
+                                    // Defensive path: attacker is an NPC (e.g., possible Lil Helper)
+                                    // Try m_hOwnerEntity to find the owning player pawn
+                                    let owner_slot = attacker_entity
+                                        .and_then(|e| e.get_value::<u32>(&OWNER_ENTITY_KEY))
+                                        .map(|h| ehandle_to_index(h) as i32)
+                                        .and_then(|owner_idx| resolve_pawn_to_slot(owner_idx, ctx));
+                                    if owner_slot.is_none() {
+                                        warn!(
+                                            "[parse_replay] sinner death: non-pawn attacker index {} owner chain failed",
+                                            attacker_index
+                                        );
+                                    }
+                                    owner_slot
+                                }
+                                None => None,
+                            };
+
+                            if let Some(slot) = killer_slot {
+                                self.sinner_tracker.record_sinner_death_killer(
+                                    entity.index(),
+                                    slot,
+                                );
+                            }
+                        }
+                    }
+                }
             }
             _ => {}
         }
@@ -536,26 +689,55 @@ impl Visitor for &mut MyVisitor {
             let msg = CCitadelUserMessageDamage::decode(data)?;
             let entities = ctx.entities().unwrap();
 
-            let attacker = entities.get(&msg.entindex_attacker());
-            let victim = entities.get(&msg.entindex_victim());
+            let attacker_idx = msg.entindex_attacker();
+            let victim_idx = msg.entindex_victim();
+            let damage = msg.damage();
+            let match_time_s = self.current_match_second;
 
-            if attacker.is_none() || victim.is_none() {
+            let (Some(attacker), Some(victim)) =
+                (entities.get(&attacker_idx), entities.get(&victim_idx))
+            else {
                 return Ok(());
+            };
+
+            // Victim is a boss -- record health sample.
+            if self.boss_tracker.is_boss_entity(victim.serializer().serializer_name.hash) {
+                self.boss_tracker.record_boss_damage(victim_idx, ctx, match_time_s)?;
             }
 
-            // Check if victim is a boss and record health sample
-            let victim_hash = victim.unwrap().serializer().serializer_name.hash;
-            if self.boss_tracker.is_boss_entity(victim_hash) {
-                let match_time_s = self.current_match_second;
-                self.boss_tracker.record_boss_damage(
-                    msg.entindex_victim(),
-                    ctx,
+            // Victim is a sinner -- track last attacker for kill attribution, and append
+            // a Dealt event when the attacker resolves to a player slot. Non-player
+            // attackers (troopers, unowned NPCs) still get kill attribution via
+            // record_damage but produce no Dealt event.
+            if self.sinner_tracker.is_tracked_sinner(victim_idx) {
+                self.sinner_tracker.record_damage(victim_idx, attacker_idx);
+                if let Some(slot) = self.resolve_attacker_to_player_slot(attacker, ctx) {
+                    self.sinner_tracker.record_dealt_event(
+                        victim_idx,
+                        slot,
+                        damage,
+                        match_time_s,
+                    );
+                }
+            }
+
+            // Attacker is a sinner -- append a Retaliated event. Confirmed
+            // (lil-helper-sinner-interaction.md spike, replay 55841493): retaliation
+            // always targets a CCitadelPlayerPawn directly.
+            if self.sinner_tracker.is_tracked_sinner(attacker_idx)
+                && victim.serializer_name_heq(CCITADELPLAYERPAWN_ENTITY)
+                && let Some(slot) = resolve_pawn_to_slot(victim_idx, ctx)
+            {
+                self.sinner_tracker.record_retaliation(
+                    attacker_idx,
+                    slot,
+                    damage,
                     match_time_s,
-                )?;
+                );
             }
 
             let record = DamageRecord {
-                damage: msg.damage(),
+                damage,
                 pre_damage: msg.pre_damage(),
                 damage_type: msg.r#type(),
                 citadel_type: msg.citadel_type(),
@@ -574,9 +756,7 @@ impl Visitor for &mut MyVisitor {
                 health_lost: msg.health_lost(),
             };
 
-            if let Err(error) =
-                self.push_damage_record(ctx, attacker.unwrap(), victim.unwrap(), record)
-            {
+            if let Err(error) = self.push_damage_record(ctx, attacker, victim, record) {
                 error!("[parse_replay] Failed to push damage record: {:?}", error);
                 return Err(error.into());
             }
@@ -590,8 +770,8 @@ impl Visitor for &mut MyVisitor {
                 if let Ok(meta) = CMsgMatchMetaDataContentsPatched::decode(&mut cursor) {
                     if let Some(match_info) = meta.match_info {
                         if let Some(damage_matrix) = match_info.damage_matrix {
-                            println!(
-                                "PostMatch damage_matrix: dealers={} samples={}",
+                            debug!(
+                                "[parse_replay] PostMatch damage_matrix: dealers={} samples={}",
                                 damage_matrix.damage_dealers.len(),
                                 damage_matrix.sample_time_s.len()
                             );

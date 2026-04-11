@@ -5,3 +5,8 @@ src/compressed-replays/*
 src/replays/*
 !src/replays/.gitkeep
 .env
+
+# Probe binaries are local-only -- they balloon across worktrees and are
+# typically throwaway. Add new probes here without committing them.
+src/bin/*
+!src/bin/.gitkeep
