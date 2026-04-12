@@ -574,9 +574,7 @@ impl Visitor for &mut MyVisitor {
                 // heals, Patron phase 1->2 reset, Patron time-based scaling,
                 // and out-of-combat regen.
                 if self.boss_tracker.is_boss_entity(hash) {
-                    let match_time_s = self.total_match_time_s.saturating_sub(
-                        self.match_start_time_s.unwrap_or(0),
-                    );
+                    let match_time_s = self.current_match_second;
                     self.boss_tracker.handle_boss_update(entity, match_time_s);
                 }
                 // Update creep positions (only if match started).
