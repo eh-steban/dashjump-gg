@@ -152,11 +152,25 @@ This project uses a Product Kata-driven development workflow.
 
 ### Definition of Done (applies to ALL work)
 Every completed unit of work must meet these standards:
-- Code reviewed (use code-reviewer agent or self-review for quick-fixes)
 - Tests written and passing for new/changed code
 - Observability: logging instrumented per service conventions
 - Security: no violations of dashjump-compliance skill checklist
 - Conventions: follows relevant `.claude/rules/[service]/CLAUDE.md` patterns
+
+**Review gates (run automatically after each logical unit of work):**
+
+After completing an implementation phase, feature shard, or significant refactor:
+1. Run `test-auditor` agent against changed services -- catch coverage gaps, missing error path tests, stale tests
+2. Run `code-reviewer` agent against the unstaged diff -- catch convention violations, security issues, logic bugs
+3. Fix any issues from steps 1-2 before marking work complete
+
+For quick-fixes (typos, config changes, one-line edits): self-review is sufficient, skip auditor/reviewer.
+
+**Plan review gate (run after writing or substantially revising a plan):**
+
+After writing a spike, discovery, or implementation plan:
+1. Run `spec-writer` agent to review the plan for template alignment, completeness, measurable acceptance criteria, learnings citations, and contract field coverage
+2. Fix any structural issues before proceeding to implementation
 
 ### Development Principles
 - NEVER build without a linked experiment defining the outcome we're targeting
