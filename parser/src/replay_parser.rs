@@ -501,19 +501,16 @@ impl Visitor for &mut MyVisitor {
             _ => {}
         }
 
-        // Track souls balance for player pawns (CREATE and UPDATE events carry entity state)
+        // Track souls balance from controller entities (m_PlayerDataGlobal.m_iGoldNetWorth lives
+        // on CCitadelPlayerController, not CCitadelPlayerPawn)
         if match_started
-            && hash == CCITADELPLAYERPAWN_ENTITY
+            && hash == CCITADELPLAYERCONTROLLER_ENTITY
             && !matches!(delta_header, DeltaHeader::DELETE)
         {
-            let balance = entity
-                .get_value::<i32>(&GOLD_NET_WORTH_KEY)
-                .or_else(|| entity.get_value::<i32>(&GOLD_NET_WORTH_FLAT_KEY));
-            if let Some(balance) = balance {
-                let player_slot = self.get_custom_id(ctx, entity);
-                self.souls_tracker
-                    .handle_pawn_update(entity.index(), player_slot, balance);
-            }
+            let player_slot = entity.get_value::<u32>(&LOBBY_PLAYER_SLOT_KEY).unwrap();
+            let balance = entity.get_value::<i32>(&GOLD_NET_WORTH_KEY).unwrap();
+            self.souls_tracker
+                .handle_pawn_update(entity.index(), player_slot, balance);
         }
 
         Ok(())
