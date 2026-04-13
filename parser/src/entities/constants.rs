@@ -48,6 +48,10 @@ pub const CCITADEL_DESTROYABLE_BUILDING_ENTITY: u64 =
 pub const CNPC_BOSS_TIER3_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_Boss_Tier3");
 pub const CNPC_MIDBOSS_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_MidBoss");
 
+/// Mid-boss entity_killed_class value from CCitadelUserMsg_BossKilled.
+/// Confirmed across 8 kills in 3 replays (probe_midboss_runtime, 2026-04-08).
+pub const MID_BOSS_CLASS_ID: i32 = 8;
+
 // Neutral entities
 pub const CNPC_TROOPERNEUTRAL_ENTITY: u64 = fxhash::hash_bytes(b"CNPC_TrooperNeutral");
 pub const CNPC_NEUTRAL_SINNERSSACRIFICE_ENTITY: u64 =

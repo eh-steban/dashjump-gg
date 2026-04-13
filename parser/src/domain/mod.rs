@@ -3,6 +3,7 @@
 pub mod boss;
 pub mod creep;
 pub mod damage;
+pub mod mid_boss;
 pub mod player;
 pub mod sinner;
 
