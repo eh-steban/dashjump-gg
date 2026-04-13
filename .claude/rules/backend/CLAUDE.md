@@ -15,28 +15,27 @@ See `.claude/rules/backend/backend-mental-model.md` for the full module structur
 
 ## Commands
 
+All commands run inside the `dashjump-backend` container via `docker compose exec`. See the root [`.claude/CLAUDE.md`](../../../.claude/CLAUDE.md) **Runtime: everything runs in containers** section for `exec` vs `run`, stack startup, and the worktree `--project-directory` invocation.
+
 ```bash
-# Run locally (from repo root)
-docker compose up backend
+# Tests
+docker compose exec dashjump-backend pytest
+docker compose exec dashjump-backend pytest tests/test_match_api.py -x -q
+docker compose exec dashjump-backend pytest --cov=app --cov-report=term-missing
 
-# Run tests
-cd backend
-pytest
-
-# Run with coverage
-pytest --cov=app --cov-report=term-missing
-
-# Linting
-ruff check app/
-ruff format app/
-
-# Type checking
-mypy app/
+# Linting / typing
+docker compose exec dashjump-backend ruff check app/
+docker compose exec dashjump-backend ruff format app/
+docker compose exec dashjump-backend mypy app/
 
 # Database migrations
-alembic upgrade head
-alembic revision --autogenerate -m "description"
+docker compose exec dashjump-backend alembic upgrade head
+docker compose exec dashjump-backend alembic revision --autogenerate -m "description"
 ```
+
+### Known pre-existing test failures
+
+`tests/test_parsed_matches_repo.py` and `tests/test_users_repo.py` need a `deadlock_test_db` database that is not provisioned automatically; they error out on connection. This is unrelated to any recent feature work. When running the full suite, either provision the DB or `--ignore` those two files to confirm your change is clean.
 
 ## Data Flow
 

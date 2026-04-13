@@ -44,53 +44,23 @@ This keeps `tests.rs` a child module of `foo`, so private fields remain accessib
 
 ## Commands
 
-```bash
-# Dev server (hot reload) -- run from parser/
-cargo watch -i src/compressed-replays/ -i src/replays/ -x run
-
-# Tests
-cargo test
-
-# Lint
-cargo clippy
-
-# Format check
-cargo fmt --check
-
-# Build release
-cargo build --release
-```
-
-### From repo root (without local Rust toolchain)
+All commands run inside the `dashjump-parser` container via `docker compose exec`. See the root [`.claude/CLAUDE.md`](../../../.claude/CLAUDE.md) **Runtime: everything runs in containers** section for `exec` vs `run`, stack startup (`scripts/wt start <name> --full` for worktrees -- parser is opt-in), and the worktree `--project-directory` invocation.
 
 ```bash
 # Tests
 docker compose exec dashjump-parser cargo test
+docker compose exec dashjump-parser cargo test creep_tracker       # specific module
+docker compose exec dashjump-parser cargo test -- --nocapture      # with output
 
-# Specific module
-docker compose exec dashjump-parser cargo test creep_tracker
-
-# With output
-docker compose exec dashjump-parser cargo test -- --nocapture
-```
-
-### Running commands against a live container
-
-**Use `exec`, not `run`.** `docker compose run` spins up a fresh container from the image -- no source changes picked up, no incremental build, no warm cargo cache. `exec` enters the already-running container where the source bind-mount and cargo cache are live.
-
-```bash
-# Any cargo command -- tests, builds, probes, one-off binaries
-docker compose exec dashjump-parser cargo test
-docker compose exec dashjump-parser cargo run --bin <binary> -- <args>
+# Build / run / lint / format
 docker compose exec dashjump-parser cargo build
+docker compose exec dashjump-parser cargo build --release
+docker compose exec dashjump-parser cargo run --bin <binary> -- <args>
+docker compose exec dashjump-parser cargo clippy
+docker compose exec dashjump-parser cargo fmt --check
 ```
 
-For **worktree containers**, prefix with `--project-directory`:
-```bash
-docker compose --project-directory ../dashjump-gg-<name> exec dashjump-parser cargo run --bin <binary> -- <args>
-```
-
-Only reach for `docker compose run` when the service container is not running (e.g., one-off migration, CI).
+Note: `scripts/wt start <name>` does NOT bring up the parser by default -- pass `--full` when you need it (`scripts/wt start midboss --full`). Parser changes are expensive to rebuild, so worktrees run without it unless actively iterating on Rust.
 
 ## Code Quality
 

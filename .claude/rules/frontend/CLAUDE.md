@@ -43,33 +43,23 @@ See `.claude/rules/frontend/frontend-mental-model.md` for the full module struct
 
 ## Commands
 
+All commands run inside the `dashjump-frontend` container via `docker compose exec`. See the root [`.claude/CLAUDE.md`](../../../.claude/CLAUDE.md) **Runtime: everything runs in containers** section for `exec` vs `run`, stack startup, and the worktree `--project-directory` invocation.
+
 ```bash
-# Run dev server directly
-cd frontend
-npm run dev
+# Tests (headless browser)
+docker compose exec dashjump-frontend npm test
+docker compose exec dashjump-frontend npm test -- --coverage
 
-# Run tests (headless browser)
-npm test
+# Lint / typecheck / build
+docker compose exec dashjump-frontend npm run lint
+docker compose exec dashjump-frontend npm run typecheck
+docker compose exec dashjump-frontend npm run build
 
-# Run tests in visible browser
-npm run test:browser
-
-# Run tests with coverage
-npm test -- --coverage
-
-# From repo root (without local Node toolchain)
-docker-compose run --rm dashjump-frontend npm test
-docker-compose run --rm dashjump-frontend npm test -- --coverage
-
-# Linting
-npm run lint
-
-# Type checking
-npm run typecheck
-
-# Build
-npm run build
+# Dev server is already running inside the container -- do not run `npm run dev` via exec.
+# To visit the UI, use the worktree's frontend port from `scripts/wt list`.
 ```
+
+`npm run test:browser` (visible browser) needs a host display and is not runnable via `docker exec`; use `npm test` for CI-style runs.
 
 ## Current Features
 
