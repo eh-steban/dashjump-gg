@@ -40,6 +40,10 @@ from app.application.use_cases.analyze_match import AnalyzeMatchUseCase
 # Helpers -- minimal valid domain objects
 # ---------------------------------------------------------------------------
 
+def _make_empty_mid_boss() -> MidBossData:
+    return MidBossData(boss_name_hash="11298616958347856125")
+
+
 def _make_transformed_match_data() -> TransformedMatchData:
     return TransformedMatchData(
         match_duration_s=1800,
@@ -48,6 +52,7 @@ def _make_transformed_match_data() -> TransformedMatchData:
         per_player_data={},
         bosses=BossData(snapshots=[], health_timeline=[]),
         lane_creep_data=LaneCreepData(creeps={}, wave_meta={}),
+        mid_boss=_make_empty_mid_boss(),
     )
 
 
@@ -118,26 +123,23 @@ class TestMatchAnalysisSchema:
         assert hasattr(data, "mid_boss")
         assert hasattr(data, "lane_pressure")
 
-    def test_mid_boss_defaults_to_none(self):
-        data = _make_transformed_match_data()
-        assert data.mid_boss is None
+    def test_mid_boss_is_required(self):
+        """mid_boss has no default -- parser always emits it, so the model enforces that."""
+        with pytest.raises(Exception):
+            TransformedMatchData(
+                match_duration_s=1800,
+                match_start_time_s=0,
+                players_data=[],
+                per_player_data={},
+                bosses=BossData(snapshots=[], health_timeline=[]),
+                lane_creep_data=LaneCreepData(creeps={}, wave_meta={}),
+            )
 
     def test_mid_boss_empty_data_round_trips(self):
         """Empty mid_boss arrays must survive JSON round-trip without loss."""
-        empty = MidBossData(boss_name_hash="12345678901234567890")
-        data = TransformedMatchData(
-            match_duration_s=1800,
-            match_start_time_s=0,
-            players_data=[],
-            per_player_data={},
-            bosses=BossData(snapshots=[], health_timeline=[]),
-            lane_creep_data=LaneCreepData(creeps={}, wave_meta={}),
-            mid_boss=empty,
-        )
-
+        data = _make_transformed_match_data()
         reloaded = TransformedMatchData.model_validate_json(data.model_dump_json())
-        assert reloaded.mid_boss is not None
-        assert reloaded.mid_boss.boss_name_hash == "12345678901234567890"
+        assert reloaded.mid_boss.boss_name_hash == "11298616958347856125"
         assert reloaded.mid_boss.max_health is None
         assert reloaded.mid_boss.spawn_events == []
         assert reloaded.mid_boss.kill_events == []
@@ -205,7 +207,6 @@ class TestMatchAnalysisSchema:
         )
 
         reloaded = TransformedMatchData.model_validate_json(data.model_dump_json())
-        assert reloaded.mid_boss is not None
         assert reloaded.mid_boss.max_health == 14950
         assert len(reloaded.mid_boss.spawn_events) == 1
         assert reloaded.mid_boss.spawn_events[0].spawn_cycle == 1
@@ -267,6 +268,7 @@ class TestMatchAnalysisSchema:
             bosses=BossData(snapshots=[], health_timeline=[]),
             lane_creep_data=LaneCreepData(creeps={}, wave_meta={}),
             sinners=[snapshot, alive_snapshot],
+            mid_boss=_make_empty_mid_boss(),
         )
 
         json_str = data.model_dump_json()

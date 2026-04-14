@@ -30,7 +30,7 @@ class ParsedMatchResponse(SQLModel):
     bosses: BossData
     lane_creep_data: LaneCreepData
     sinners: list[SinnerSnapshot] = []
-    mid_boss: MidBossData | None = None
+    mid_boss: MidBossData
 
 # TODO: Created a temporary ParsedPlayer class to make this happy
 # Might change this later
@@ -43,7 +43,7 @@ class TransformedMatchData(SQLModel):
     bosses: BossData
     lane_creep_data: LaneCreepData
     sinners: list[SinnerSnapshot] = []
-    mid_boss: MidBossData | None = None
+    mid_boss: MidBossData
     lane_pressure: LanePressureData = LanePressureData(pressure={})
 
 class MatchAnalysis(SQLModel):

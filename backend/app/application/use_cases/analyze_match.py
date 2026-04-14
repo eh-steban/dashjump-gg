@@ -190,9 +190,6 @@ class AnalyzeMatchUseCase:
         sinners_raw = parsed_json_resp.get("sinners", [])
         sinners_list = [SinnerSnapshot(**s) for s in sinners_raw]
 
-        mid_boss_raw = parsed_json_resp.get("mid_boss")
-        mid_boss_data = MidBossData(**mid_boss_raw) if mid_boss_raw else None
-
         parsed_match = ParsedMatchResponse(
             match_duration_s=parsed_json_resp.get("match_duration_s", 0),
             match_start_time_s=parsed_json_resp.get("match_start_time_s", 0),
@@ -202,7 +199,7 @@ class AnalyzeMatchUseCase:
             bosses=BossData(**parsed_json_resp.get("bosses", {})),
             lane_creep_data=lane_creep_data,
             sinners=sinners_list,
-            mid_boss=mid_boss_data,
+            mid_boss=MidBossData(**parsed_json_resp["mid_boss"]),
         )
 
         # Log compression metrics

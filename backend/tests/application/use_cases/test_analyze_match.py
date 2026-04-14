@@ -5,7 +5,11 @@ from app.domain.exceptions import ParserServiceError, DeadlockAPIError
 from app.domain.match_analysis import TransformedMatchData
 from app.domain.boss import BossData
 from app.domain.creep import LaneCreepData
+from app.domain.mid_boss import MidBossData
 from app.domain.sinner import SinnerSnapshot
+
+
+_MID_BOSS_DICT = {"boss_name_hash": "11298616958347856125"}
 
 
 @pytest.mark.asyncio
@@ -26,6 +30,7 @@ async def test_execute_returns_cached_data_when_available():
         ),
         lane_creep_data=LaneCreepData(creeps={}, wave_meta={}),
         sinners=[],
+        mid_boss=MidBossData(**_MID_BOSS_DICT),
     )
     mock_repo.get_match_data.return_value = cached_data
 
@@ -56,6 +61,7 @@ async def test_execute_uses_local_demo_when_available():
         "positions": [],
         "bosses": {"snapshots": [], "health_timeline": []},
         "lane_creep_data": {"creeps": {}, "wave_meta": {}},
+        "mid_boss": _MID_BOSS_DICT,
     }
 
     use_case = AnalyzeMatchUseCase(mock_parser, mock_deadlock, mock_repo)
@@ -86,6 +92,7 @@ async def test_execute_falls_back_to_api_when_parser_check_fails():
         "positions": [],
         "bosses": {"snapshots": [], "health_timeline": []},
         "lane_creep_data": {"creeps": {}, "wave_meta": {}},
+        "mid_boss": _MID_BOSS_DICT,
     }
 
     use_case = AnalyzeMatchUseCase(mock_parser, mock_deadlock, mock_repo)
@@ -115,6 +122,7 @@ async def test_execute_falls_back_when_local_parse_fails():
             "bosses": {"snapshots": [], "health_timeline": []},
             "lane_creep_data": {"creeps": {}, "wave_meta": {}},
             "sinners": [],
+            "mid_boss": _MID_BOSS_DICT,
         },
     ]
     mock_deadlock.get_demo_url.return_value = {"demo_url": "http://example.com/demo.bz2"}

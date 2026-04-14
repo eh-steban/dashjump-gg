@@ -12,6 +12,7 @@ from app.domain.boss import BossData
 from app.domain.creep import LaneCreepData
 from app.domain.match_analysis import TransformedMatchData
 from app.domain.lane_pressure import LanePressureData
+from app.domain.mid_boss import MidBossData
 
 
 # ---------------------------------------------------------------------------
@@ -28,6 +29,7 @@ def _match_data_dict(match_duration_s: int = 1800) -> dict:
         bosses=BossData(snapshots=[], health_timeline=[]),
         lane_creep_data=LaneCreepData(creeps={}, wave_meta={}),
         lane_pressure=LanePressureData(pressure={}),
+        mid_boss=MidBossData(boss_name_hash="11298616958347856125"),
     ).model_dump()
 
 
