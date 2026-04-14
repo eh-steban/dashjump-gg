@@ -7,14 +7,50 @@ Esports analytics platform for Deadlock. Monorepo with three microservices.
 - Use `--` (double-hyphen) instead of em-dashes (`—`) in all prose, docs, and commit messages. Em-dashes render as `<E2><80><94>` in git diffs and terminals.
 - Never hard-wrap prose lines in markdown files. Do not insert manual line breaks mid-sentence. Let lines be as long as needed -- editors and renderers handle wrapping. Hard-wrapped lines with continuation indents double-wrap in terminals and look broken.
 
-## Quick Reference
+## Runtime: everything runs in containers
+
+**No service ever runs on the host.** Python, Node, Rust toolchains, pytest, ruff, mypy, alembic, cargo, vitest, npm -- all of it lives inside the service containers. There is no host-side venv, no `nvm`, no `rustup`. If a command isn't working because a binary is missing, the answer is always "run it inside the container", never "install it on the host".
+
+### Starting the stack
 
 ```bash
-# Full stack (all services + database)
-docker-compose up
+# Main worktree (from repo root)
+docker compose up -d                    # all services
+docker compose up -d dashjump-backend   # just one
 
-# Service-specific commands in each service's CLAUDE.md
+# Named worktree (from the worktree directory -- e.g. dashjump-gg-midboss)
+scripts/wt start <name> [--full]   # --full includes parser
+scripts/wt list                    # show up/down + port assignments
+scripts/wt stop <name>
 ```
+
+Always use `scripts/wt start` for worktrees -- it handles the `--file` / `--project-directory` / `.env` plumbing that plain `docker compose up` gets wrong.
+
+### Running commands in a live container
+
+**Use `exec`, not `run`.** `docker compose run` spins up a fresh container from the image -- no source bind-mount, no warm caches. `exec` enters the already-running container.
+
+```bash
+# Main worktree
+docker compose exec <service> <command>
+
+# Named worktree (Compose needs both compose files and the project-directory)
+docker compose \
+  --file /home/lifted/Code/dashjump/dashjump-gg/docker-compose.yaml \
+  --file /home/lifted/Code/dashjump/dashjump-gg-<name>/docker-compose.override.yaml \
+  --project-directory /home/lifted/Code/dashjump/dashjump-gg-<name> \
+  exec -T <service> <command>
+```
+
+Only reach for `docker compose run --rm` when the service container genuinely isn't running yet (e.g. `alembic upgrade head` on a fresh DB before `dashjump-backend` has come up -- this is what `scripts/wt start` does internally).
+
+### Service-specific commands
+
+Each service has its own `CLAUDE.md` with the exact `exec` invocations for tests, lint, typing, migrations, etc. -- check there first instead of guessing:
+
+- Backend: [.claude/rules/backend/CLAUDE.md](.claude/rules/backend/CLAUDE.md) -- pytest, ruff, mypy, alembic
+- Parser: [.claude/rules/parser/CLAUDE.md](.claude/rules/parser/CLAUDE.md) -- cargo test, cargo run, cargo build
+- Frontend: [.claude/rules/frontend/CLAUDE.md](.claude/rules/frontend/CLAUDE.md) -- vitest, eslint, tsc
 
 ## Project Structure
 
