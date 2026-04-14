@@ -151,3 +151,82 @@ async def test_execute_raises_when_all_sources_fail():
 
     with pytest.raises(ParserServiceError):
         await use_case.execute(12345, schema_version=1, session=MagicMock())
+
+
+@pytest.mark.asyncio
+async def test_execute_wires_populated_mid_boss_end_to_end():
+    """A populated mid_boss payload from the parser must flow through to the result."""
+    mock_parser = AsyncMock()
+    mock_deadlock = AsyncMock()
+    mock_repo = AsyncMock()
+
+    mock_repo.get_match_data.return_value = None  # Cache miss
+    mock_parser.check_demo_available.return_value = (True, "12345_67890.dem")
+    mock_parser.parse_demo.return_value = {
+        "match_duration_s": 0,
+        "match_start_time_s": 0,
+        "players": [],
+        "damage": [],
+        "positions": [],
+        "bosses": {"snapshots": [], "health_timeline": []},
+        "lane_creep_data": {"creeps": {}, "wave_meta": {}},
+        "mid_boss": {
+            "boss_name_hash": "11298616958347856125",
+            "max_health": 14950,
+            "spawn_events": [{"spawn_cycle": 1, "spawn_time_s": 600.0}],
+            "kill_events": [
+                {
+                    "spawn_cycle": 1,
+                    "team": 2,
+                    "team_claimed": 3,
+                    "matchtime_s": 942.5,
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -768.0,
+                    "bosses_remaining": 0,
+                }
+            ],
+        },
+    }
+
+    use_case = AnalyzeMatchUseCase(mock_parser, mock_deadlock, mock_repo)
+    result, _etag = await use_case.execute(12345, schema_version=1, session=MagicMock())
+
+    assert result.mid_boss.boss_name_hash == "11298616958347856125"
+    assert result.mid_boss.max_health == 14950
+    assert len(result.mid_boss.spawn_events) == 1
+    assert result.mid_boss.spawn_events[0].spawn_time_s == 600.0
+    assert len(result.mid_boss.kill_events) == 1
+    assert result.mid_boss.kill_events[0].team_claimed == 3
+
+
+@pytest.mark.asyncio
+async def test_execute_fails_loud_on_malformed_mid_boss_payload():
+    """If the parser returns a structurally-wrong mid_boss, the use case must surface it.
+
+    Regression guard: a missing boss_name_hash or a wrong-type field indicates a parser
+    regression we want to fail loudly on, not silently coerce to None.
+    """
+    from pydantic import ValidationError
+
+    mock_parser = AsyncMock()
+    mock_deadlock = AsyncMock()
+    mock_repo = AsyncMock()
+
+    mock_repo.get_match_data.return_value = None
+    mock_parser.check_demo_available.return_value = (True, "12345_67890.dem")
+    mock_parser.parse_demo.return_value = {
+        "match_duration_s": 0,
+        "match_start_time_s": 0,
+        "players": [],
+        "damage": [],
+        "positions": [],
+        "bosses": {"snapshots": [], "health_timeline": []},
+        "lane_creep_data": {"creeps": {}, "wave_meta": {}},
+        "mid_boss": {"spawn_events": []},  # missing required boss_name_hash
+    }
+
+    use_case = AnalyzeMatchUseCase(mock_parser, mock_deadlock, mock_repo)
+
+    with pytest.raises(ValidationError):
+        await use_case.execute(12345, schema_version=1, session=MagicMock())
