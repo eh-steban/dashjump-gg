@@ -4,7 +4,7 @@ from typing import Optional
 class BossSnapshot(SQLModel):
     entity_index: int
     custom_id: int     # Entity type ID (21, 25, 26, 27, 28)
-    boss_name_hash: int
+    boss_name_hash: str
     team: int
     lane: int
     x: float

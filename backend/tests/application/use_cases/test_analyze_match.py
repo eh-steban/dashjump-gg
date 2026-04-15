@@ -230,3 +230,45 @@ async def test_execute_fails_loud_on_malformed_mid_boss_payload():
 
     with pytest.raises(ValidationError):
         await use_case.execute(12345, schema_version=1, session=MagicMock())
+
+
+def test_boss_snapshot_boss_name_hash_round_trips_as_string():
+    """Regression guard for the JS precision-loss fix.
+
+    Pins the wire format: a parser response with `"boss_name_hash"` as a JSON
+    string must deserialize into a `BossSnapshot` whose field equals the
+    string-typed `BOSS_HASH_GUARDIAN` constant. Any future revert of the field
+    to `int` -- or of the constants to numeric literals -- breaks both
+    assertions. Without this guard the parser->backend->frontend chain can
+    silently regress to numeric transport, which IEEE 754 truncates above
+    2^53 and corrupts every real fxhash on the JS side.
+    """
+    from app.domain.boss import BossSnapshot
+    from app.services.lane_pressure_service import (
+        BOSS_HASH_GUARDIAN,
+        _BOSS_PRIORITY,
+    )
+
+    # Lock all five priority constants as strings; a numeric literal for any
+    # one of them silently downgrades dict lookups to the unknown-boss fallback
+    # (priority 99) and breaks objective sort order without raising.
+    assert len(_BOSS_PRIORITY) == 5
+    assert all(isinstance(k, str) for k in _BOSS_PRIORITY)
+
+    snapshot = BossSnapshot.model_validate({
+        "entity_index": 2527,
+        "custom_id": 21,
+        "boss_name_hash": "12946736302082733589",
+        "team": 2,
+        "lane": 1,
+        "x": -8128.0,
+        "y": -1856.0,
+        "z": 0.0,
+        "spawn_time_s": 0,
+        "max_health": 5500,
+        "life_state_on_create": 0,
+    })
+
+    assert isinstance(snapshot.boss_name_hash, str)
+    assert snapshot.boss_name_hash == BOSS_HASH_GUARDIAN
+    assert _BOSS_PRIORITY[snapshot.boss_name_hash] == 1

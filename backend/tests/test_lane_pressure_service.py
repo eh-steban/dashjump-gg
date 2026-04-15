@@ -31,15 +31,16 @@ from app.services.lane_pressure_service import (
 
 def _make_boss(
     entity_index: int,
-    hash_: int,
+    hash_: str,
     lane: int,
     team: int,
     x: float,
     y: float,
 ) -> BossSnapshot:
-    """Build a BossSnapshot mock. `hash_` is the u64 boss_name_hash -- use one
-    of the BOSS_HASH_* constants from lane_pressure_service to identify the
-    boss type. custom_id is a convenience field that the service no longer
+    """Build a BossSnapshot mock. `hash_` is the boss_name_hash decimal string
+    (u64 transported as string -- see parser-output.md). Use one of the
+    BOSS_HASH_* constants from lane_pressure_service to identify the boss
+    type. custom_id is a convenience field that the service no longer
     consults, so it is left at 0.
     """
     return BossSnapshot(
@@ -737,3 +738,29 @@ class TestDegradedLanePath:
             "99_2_0" in rec.message and "lane=99" in rec.message
             for rec in caplog.records
         ), f"Expected error log referencing wave 99_2_0; got {[r.message for r in caplog.records]}"
+
+
+def test_build_objective_map_sorts_by_priority():
+    """Direct sort-order regression for `_build_objective_map`.
+
+    Pins that the per-lane bucket comes back in attack-priority order:
+    Guardian -> Walker -> Base Guardian -> Shrine -> Patron. If
+    `_BOSS_PRIORITY` ever stops keying on the str-typed `boss_name_hash`,
+    every lookup falls back to 99 and the bucket sorts arbitrarily -- a
+    silent regression that does not raise. Existing
+    `test_target_advances_to_*` tests catch this indirectly through the
+    pressure pipeline; this test catches it at the source.
+    """
+    boss_data = _straight_chain()
+    objective_map = LanePressureCalculator._build_objective_map(boss_data)
+
+    enemy_lane_1 = objective_map[(1, 3)]
+    hashes = [s.boss_name_hash for s in enemy_lane_1]
+
+    assert hashes[0] == BOSS_HASH_GUARDIAN
+    assert hashes[1] == BOSS_HASH_WALKER
+    # Two Base Guardians collapse next, then shrine and patron at the tail.
+    assert hashes[2] == BOSS_HASH_BASE_GUARDIAN
+    assert hashes[3] == BOSS_HASH_BASE_GUARDIAN
+    assert hashes[-2] == BOSS_HASH_SHRINE
+    assert hashes[-1] == BOSS_HASH_PATRON

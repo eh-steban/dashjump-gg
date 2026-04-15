@@ -10,7 +10,7 @@ fn insert_test_boss(tracker: &mut BossTracker, entity_index: i32, max_health: i3
         BossSnapshot {
             entity_index,
             custom_id: 0,
-            boss_name_hash: 0,
+            boss_name_hash: "0".to_string(),
             team: 0,
             lane: 0,
             x: 0.0,

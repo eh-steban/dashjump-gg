@@ -7,8 +7,12 @@ pub struct BossSnapshot {
     pub entity_index: i32,
     /// Entity type ID (21, 25, 26, 27, 28)
     pub custom_id: u32,
-    /// serializer_name.hash
-    pub boss_name_hash: u64,
+    /// serializer_name fxhash as a decimal string.
+    ///
+    /// Serialized as a JSON string (not a number) to preserve the full u64 range
+    /// across the JSON boundary to JavaScript, which cannot represent integers
+    /// above 2^53 without precision loss. Mirrors `MidBossData.boss_name_hash`.
+    pub boss_name_hash: String,
     pub team: u32,
     pub lane: i32,
     pub x: f32,
@@ -20,3 +24,6 @@ pub struct BossSnapshot {
     pub death_time_s: Option<u32>,
     pub life_state_on_delete: Option<i32>,
 }
+
+#[cfg(test)]
+mod tests;
