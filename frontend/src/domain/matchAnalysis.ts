@@ -3,6 +3,7 @@ import { ParsedPlayer, PlayerMatchData } from "./player";
 import { BossData } from "./boss";
 import { LaneCreepData } from "./creep";
 import { LanePressureData } from "./lanePressure";
+import { MidBossData } from "./midBoss";
 import { SinnerSnapshot } from "./sinner";
 
 // Parsed match data (aggregated by player, per backend ParsedMatchData)
@@ -15,6 +16,7 @@ export interface ParsedMatchData {
   lane_creep_data: LaneCreepData;
   lane_pressure: LanePressureData;
   sinners: SinnerSnapshot[];
+  mid_boss: MidBossData;
 }
 
 // Full match analysis response (backend MatchAnalysis)
@@ -93,5 +95,14 @@ export const defaultMatchAnalysis: MatchAnalysisResponse = {
       pressure: {},
     },
     sinners: [],
+    mid_boss: {
+      boss_name_hash: "16112031173533486177",
+      max_health: null,
+      spawn_events: [],
+      kill_events: [],
+      rejuv_events: [],
+      fight_windows: [],
+      post_match: [],
+    },
   },
 };

@@ -291,6 +291,12 @@ impl MyVisitor {
         if self.boss_tracker.is_boss_entity(hash) {
             return entity.index() as u32;
         }
+        // Mid-boss appears as both attacker and victim in damage events but is not
+        // in get_custom_id's NPC match (fixed IDs would collide across spawn cycles).
+        // Use entity index for per-instance identity, mirroring the priest slide-trap pattern.
+        if hash == CNPC_MIDBOSS_ENTITY {
+            return entity.index() as u32;
+        }
         // Projectiles appear as damage sources but aren't position-tracked entities.
         // Use entity index to uniquely identify them without a fixed ID.
         if hash == CPROJECTILE_PRIEST_SLIDETRAP_ENTITY {
@@ -906,3 +912,6 @@ pub async fn parse_replay(replay_full_path: &str) -> Result<serde_json::Value> {
 
     Ok(visitor.get_match_data_json())
 }
+
+#[cfg(test)]
+mod tests;
