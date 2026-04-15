@@ -184,6 +184,7 @@ This project uses a Product Kata-driven development workflow.
   | `spike.md` | `private/plans/spikes/` | Single narrow question, timebox ≤ 1 day, no implementation |
   | `discovery.md` | `private/plans/discovery/` | Multiple unknowns blocking implementation design |
   | `implementation.md` | `private/plans/implementation/` | Implementation where unknowns are already resolved |
+  | `fix.md` | `private/plans/fixes/` | Narrow defect fix with root cause known; lighter than `implementation.md`, heavier than `/quick-fix` |
 - Machine-switch state: `private/CONTEXT.md` (read at session start only)
 
 ### Knowledge Management
@@ -199,27 +200,22 @@ This project uses a Product Kata-driven development workflow.
 - `private/learnings.md` (promoted entries): spec-writer only
 - `private/learnings.md` ## Drafts: any service agent may append
 
-### Definition of Done (applies to ALL work)
-Every completed unit of work must meet these standards:
-- Tests written and passing for new/changed code
-- Observability: logging instrumented per service conventions
-- Security: no violations of dashjump-compliance skill checklist
-- Conventions: follows relevant `.claude/rules/[service]/CLAUDE.md` patterns
+### Definition of Done (applies to ALL completed work)
 
-**Review gates (run automatically after each logical unit of work):**
+DoD is cross-cutting and applies to every unit of work -- fixes, features, refactors, spikes that touch code. A plan's `Acceptance Criteria` covers fix-specific behaviors; DoD covers everything else and is **not** duplicated in per-plan AC. A unit of work is "done" only when **all** of the following hold:
 
-After completing an implementation phase, feature shard, or significant refactor:
-1. Run `test-auditor` agent against changed services -- catch coverage gaps, missing error path tests, stale tests
-2. Run `code-reviewer` agent against the unstaged diff -- catch convention violations, security issues, logic bugs
-3. Fix any issues from steps 1-2 before marking work complete
+1. **Tests** -- new/changed code has tests; the full suite passes inside the service container
+2. **Observability** -- logging instrumented per `.claude/rules/[service]/observability.md`
+3. **Security** -- no violations of the `dashjump-compliance` skill checklist
+4. **Conventions** -- follows the relevant `.claude/rules/[service]/CLAUDE.md` patterns
+5. **Test audit** -- `test-auditor` agent run against the unstaged diff; every flagged gap either addressed or explicitly deferred with a written reason
+6. **Code review** -- `code-reviewer` agent run against the unstaged diff; every flagged issue either addressed or explicitly deferred with a written reason
 
-For quick-fixes (typos, config changes, one-line edits): self-review is sufficient, skip auditor/reviewer.
+**Quick-fix exemption:** for typos, config tweaks, and one-line edits where an audit would be disproportionate, items 5-6 may be replaced with self-review. The exemption is for genuinely trivial changes only -- if the change touches business logic, data shape, or a contract, the gates apply.
 
-**Plan review gate (run after writing or substantially revising a plan):**
+**Plan review gate (separate from DoD; applies to planning artifacts, not code):**
 
-After writing a spike, discovery, or implementation plan:
-1. Run `spec-writer` agent to review the plan for template alignment, completeness, measurable acceptance criteria, learnings citations, and contract field coverage
-2. Fix any structural issues before proceeding to implementation
+After writing or substantially revising a spike, discovery, fix, or implementation plan, run `spec-writer` to review the plan for template alignment, completeness, measurable AC, learnings citations, and contract field coverage. Fix structural issues before proceeding to implementation.
 
 ### Development Principles
 - NEVER build without a linked experiment defining the outcome we're targeting
