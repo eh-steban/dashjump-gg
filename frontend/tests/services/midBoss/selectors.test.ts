@@ -37,13 +37,14 @@ function spawn(spawn_cycle: number, spawn_time_s: number): MidBossSpawnEvent {
 function kill(
   spawn_cycle: number,
   matchtime_s: number,
-  team = 2,
+  team_killed = 2,
   team_claimed = 2
 ): MidBossKillEvent {
   return {
     spawn_cycle,
-    team,
+    team_killed,
     team_claimed,
+    rejuvs_by_team: { "2": 0, "3": 0 },
     matchtime_s,
     x: 0,
     y: 0,
@@ -138,6 +139,20 @@ describe('findActiveCycle', () => {
       kill_events: [kill(1, 900)],
     });
     expect(findActiveCycle(midBoss, 1000)).toBeNull();
+  });
+
+  it('activates the cycle at integer tick when spawn_time_s is fractional', () => {
+    // Parser emits spawn_time_s at tick resolution (tick/64), so real replays
+    // land on fractional seconds. The scrubber is integer-valued -- without
+    // flooring, integer tick 1722 would miss a spawn at 1722.11 and we would
+    // show the prior cycle's rejuv claim instead of the new bar.
+    const midBoss = makeMidBoss({
+      spawn_events: [spawn(1, 581.03), spawn(2, 1722.11)],
+      kill_events: [kill(1, 1302.09), kill(2, 1749.77)],
+    });
+    const cycle = findActiveCycle(midBoss, 1722);
+    expect(cycle?.spawn_cycle).toBe(2);
+    expect(cycle?.kill?.matchtime_s).toBe(1749.77);
   });
 });
 

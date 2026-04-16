@@ -47,8 +47,9 @@ describe('MidBossLayer', () => {
       kill_events: [
         {
           spawn_cycle: 1,
-          team: 2,
+          team_killed: 2,
           team_claimed: 2,
+          rejuvs_by_team: { "2": 0, "3": 0 },
           matchtime_s: 942,
           x: 0,
           y: 0,
@@ -95,8 +96,9 @@ describe('MidBossLayer', () => {
       kill_events: [
         {
           spawn_cycle: 1,
-          team: 2,
+          team_killed: 2,
           team_claimed: 2,
+          rejuvs_by_team: { "2": 0, "3": 0 },
           matchtime_s: 942,
           x: 0,
           y: 0,

@@ -44,11 +44,14 @@ export function findActiveCycle(
 ): MidBossCycleState | null {
   // Walk spawns in reverse so we pick the most-recent one whose spawn_time_s
   // has already passed. This naturally skips future spawns when scrubbing
-  // backwards.
+  // backwards. `spawn_time_s` is a parser float (tick/64) but `currentSecond`
+  // is integer-valued, so we floor to avoid losing the tick where the new
+  // cycle actually starts (a spawn at 1722.11 must activate at tick 1722, not
+  // 1723).
   const spawns = midBoss.spawn_events;
   for (let i = spawns.length - 1; i >= 0; i--) {
     const spawn = spawns[i];
-    if (currentSecond < spawn.spawn_time_s) continue;
+    if (currentSecond < Math.floor(spawn.spawn_time_s)) continue;
     const kill =
       midBoss.kill_events.find((k) => k.spawn_cycle === spawn.spawn_cycle) ??
       null;

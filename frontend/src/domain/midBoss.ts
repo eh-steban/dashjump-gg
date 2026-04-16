@@ -9,8 +9,9 @@ export interface MidBossSpawnEvent {
 
 export interface MidBossKillEvent {
   spawn_cycle: number;
-  team: number;
+  team_killed: number;
   team_claimed: number;
+  rejuvs_by_team: Record<string, number>;
   matchtime_s: number;
   x: number;
   y: number;
@@ -41,11 +42,13 @@ export interface FightWindow {
   health_samples: HealthSample[];
 }
 
-// Mirrors Valve's post-match mid_boss blob. Logged to the console for
-// cross-validation with our replay-derived team_claimed; not rendered in UI.
+// Parser-derived summary of each mid-boss kill cycle. `team_claimed` is
+// intentionally absent here -- callers who want the "who won this fight"
+// verdict should read it off `MidBossKillEvent` (which applies strict-majority
+// derivation). Valve's raw blob still lives at `match_metadata.match_info.mid_boss`.
 export interface MidBossPostMatch {
   team_killed: number;
-  team_claimed: number;
+  rejuvs_by_team: Record<string, number>;
   destroyed_time_s: number;
 }
 

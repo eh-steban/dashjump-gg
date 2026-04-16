@@ -174,20 +174,6 @@ const MatchAnalysis = () => {
     [sinnerSnapshots]
   );
 
-  // Dev-only diagnostic: cross-check our replay-derived kill events against
-  // Valve's post-match blob so we can spot divergences. Gated behind
-  // MODE === 'development' per frontend observability rules; production
-  // builds ship silently.
-  useEffect(() => {
-    if (import.meta.env.MODE !== 'development') return;
-    const midBoss = parsedMatchData.mid_boss;
-    if (!midBoss || midBoss.post_match.length === 0) return;
-    console.group('[MidBoss] Valve post_match vs parser kill_events');
-    console.log('post_match:', midBoss.post_match);
-    console.log('kill_events:', midBoss.kill_events);
-    console.groupEnd();
-  }, [parsedMatchData.mid_boss]);
-
   // Diagnostic: log lane_creep_data stats once per load. Helps identify frozen-creep bugs:
   // - "sec-0 creeps" are spawned at match start (expected), but a high count hints at ghost entries
   // - "lane-0 wave IDs" mean the parser registered a creep before its lane was assigned (bug)
