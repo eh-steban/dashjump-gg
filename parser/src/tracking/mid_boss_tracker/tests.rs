@@ -480,3 +480,30 @@ fn finalize_on_empty_tracker_is_noop() {
     assert_eq!(data.post_match.len(), 0);
     assert!(data.max_health.is_none());
 }
+
+// Mid-boss spawns at the 10-minute mark in every match. The differentiator is
+// whether it gets killed -- a match where it spawns but survives is the real
+// empty-downstream path. finalize() must emit the spawn event and leave
+// kill/rejuv/fight-window/post-match collections empty, with no open window.
+#[test]
+fn finalize_after_spawn_without_kill_emits_spawn_only_output() {
+    let mut tracker = MidBossTracker::new();
+    tracker.handle_spawn(600.0);
+    tracker.finalize();
+
+    assert_eq!(tracker.spawn_events.len(), 1);
+    assert_eq!(tracker.spawn_events[0].spawn_cycle, 1);
+    assert!((tracker.spawn_events[0].spawn_time_s - 600.0).abs() < 0.001);
+    assert_eq!(tracker.kill_events.len(), 0);
+    assert_eq!(tracker.rejuv_events.len(), 0);
+    assert_eq!(tracker.fight_windows.len(), 0);
+    assert_eq!(tracker.post_match.len(), 0);
+    assert!(tracker.open_window.is_none());
+
+    let data = tracker.get_output();
+    assert_eq!(data.spawn_events.len(), 1);
+    assert_eq!(data.kill_events.len(), 0);
+    assert_eq!(data.rejuv_events.len(), 0);
+    assert_eq!(data.fight_windows.len(), 0);
+    assert_eq!(data.post_match.len(), 0);
+}
