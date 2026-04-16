@@ -13,8 +13,9 @@ class MidBossSpawnEvent(SQLModel):
 
 class MidBossKillEvent(SQLModel):
     spawn_cycle: int
-    team: int
+    team_killed: int
     team_claimed: int
+    rejuvs_by_team: dict[str, int]
     matchtime_s: float
     x: float
     y: float
@@ -41,7 +42,7 @@ class FightWindow(SQLModel):
 
 class MidBossPostMatch(SQLModel):
     team_killed: int
-    team_claimed: int
+    rejuvs_by_team: dict[str, int]
     destroyed_time_s: int
 
 

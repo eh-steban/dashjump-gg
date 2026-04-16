@@ -160,8 +160,9 @@ class TestMatchAnalysisSchema:
             kill_events=[
                 MidBossKillEvent(
                     spawn_cycle=1,
-                    team=2,
+                    team_killed=2,
                     team_claimed=3,
+                    rejuvs_by_team={"2": 1, "3": 2},
                     matchtime_s=942.5,
                     x=0.0,
                     y=0.0,
@@ -192,7 +193,11 @@ class TestMatchAnalysisSchema:
                 )
             ],
             post_match=[
-                MidBossPostMatch(team_killed=2, team_claimed=3, destroyed_time_s=942)
+                MidBossPostMatch(
+                    team_killed=2,
+                    rejuvs_by_team={"2": 1, "3": 2},
+                    destroyed_time_s=942,
+                )
             ],
         )
 
@@ -213,8 +218,9 @@ class TestMatchAnalysisSchema:
         assert reloaded.mid_boss.spawn_events[0].spawn_time_s == 600.0
         assert len(reloaded.mid_boss.kill_events) == 1
         kill = reloaded.mid_boss.kill_events[0]
-        assert kill.team == 2
+        assert kill.team_killed == 2
         assert kill.team_claimed == 3
+        assert kill.rejuvs_by_team == {"2": 1, "3": 2}
         assert kill.matchtime_s == 942.5
         assert kill.z == -768.0
         assert len(reloaded.mid_boss.rejuv_events) == 1

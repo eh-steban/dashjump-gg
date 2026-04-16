@@ -39,8 +39,9 @@ def test_transform_passes_mid_boss_through_unchanged():
         kill_events=[
             MidBossKillEvent(
                 spawn_cycle=1,
-                team=2,
+                team_killed=2,
                 team_claimed=3,
+                rejuvs_by_team={"2": 1, "3": 2},
                 matchtime_s=942.5,
                 x=0.0,
                 y=0.0,

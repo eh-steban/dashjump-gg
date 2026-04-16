@@ -177,8 +177,9 @@ async def test_execute_wires_populated_mid_boss_end_to_end():
             "kill_events": [
                 {
                     "spawn_cycle": 1,
-                    "team": 2,
+                    "team_killed": 2,
                     "team_claimed": 3,
+                    "rejuvs_by_team": {"2": 1, "3": 2},
                     "matchtime_s": 942.5,
                     "x": 0.0,
                     "y": 0.0,
