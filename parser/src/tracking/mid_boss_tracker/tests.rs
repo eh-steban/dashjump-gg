@@ -3,6 +3,23 @@
 use super::*;
 
 // =========================================================================
+// Test helpers
+// =========================================================================
+
+/// Simulate a kill preceded by a damage burst, so the fight window anchors
+/// rejuv attribution on last-damage time. Matches the real parser flow where
+/// record_damage always fires before handle_kill.
+fn simulate_damage_and_kill(
+    tracker: &mut MidBossTracker,
+    last_damage_time_s: f32,
+    kill_time_s: f32,
+) {
+    tracker.record_damage(10_000, last_damage_time_s - 5.0);
+    tracker.record_damage(5_000, last_damage_time_s);
+    tracker.handle_kill(kill_time_s, 0.0, 0.0, 0.0, 0);
+}
+
+// =========================================================================
 // Spawn events
 // =========================================================================
 
@@ -31,26 +48,28 @@ fn multiple_spawns_produce_multiple_events_with_incrementing_cycles() {
 }
 
 // =========================================================================
-// Kill events
+// Kill events: shape and placeholder team fields
 // =========================================================================
 
 #[test]
-fn handle_kill_pushes_event_with_correct_fields() {
+fn handle_kill_pushes_event_with_placeholder_teams_until_finalize() {
     let mut tracker = MidBossTracker::new();
     tracker.handle_spawn(60.0);
-    tracker.handle_kill(2, 180.0, 100.0, 200.0, 50.0, 3);
+    tracker.handle_kill(180.0, 100.0, 200.0, 50.0, 3);
 
     assert_eq!(tracker.kill_events.len(), 1);
     let kill = &tracker.kill_events[0];
     assert_eq!(kill.spawn_cycle, 1);
-    assert_eq!(kill.team, 2);
     assert!((kill.matchtime_s - 180.0).abs() < 0.001);
-    assert!((kill.x - 100.0).abs() < 0.001);
-    assert!((kill.y - 200.0).abs() < 0.001);
-    assert!((kill.z - 50.0).abs() < 0.001);
+    assert_eq!(kill.x, 100.0);
+    assert_eq!(kill.y, 200.0);
+    assert_eq!(kill.z, 50.0);
     assert_eq!(kill.bosses_remaining, 3);
-    // team_claimed defaults to team before finalize
-    assert_eq!(kill.team_claimed, 2);
+    // Placeholders until finalize() populates from rejuv events.
+    assert_eq!(kill.team_killed, 0);
+    assert_eq!(kill.team_claimed, 0);
+    assert_eq!(kill.rejuvs_by_team.get("2"), Some(&0));
+    assert_eq!(kill.rejuvs_by_team.get("3"), Some(&0));
 }
 
 // =========================================================================
@@ -132,23 +151,24 @@ fn fight_window_within_gap_appends_samples() {
 }
 
 // =========================================================================
-// Fight windows -- handle_kill closes with health_at_end=0
+// Fight windows -- handle_kill closes at last-damage time (not kill time)
 // =========================================================================
 
 #[test]
-fn handle_kill_closes_fight_window_with_health_at_end_zero() {
+fn handle_kill_closes_fight_window_at_last_damage_time() {
     let mut tracker = MidBossTracker::new();
     tracker.handle_spawn(60.0);
     tracker.record_damage(5000, 65.0);
     tracker.record_damage(2000, 66.0);
-    tracker.handle_kill(2, 67.0, 0.0, 0.0, 0.0, 0);
+    // Kill message fires several seconds after last damage (BossKilled.gametime lag).
+    tracker.handle_kill(73.0, 0.0, 0.0, 0.0, 0);
 
-    // Window closed at kill time with health_at_end=0
     assert_eq!(tracker.fight_windows.len(), 1);
     let window = &tracker.fight_windows[0];
     assert_eq!(window.health_at_end, 0);
-    assert!((window.window_end_s - 67.0).abs() < 0.001);
-    // No open window
+    // window_end_s must be the last-damage time, not the kill message time --
+    // this is the anchor used for rejuv attribution.
+    assert!((window.window_end_s - 66.0).abs() < 0.001);
     assert!(tracker.open_window.is_none());
 }
 
@@ -172,71 +192,184 @@ fn finalize_closes_open_fight_window() {
 }
 
 // =========================================================================
-// team_claimed derivation
+// team_killed sourced from RejuvStatus.killing_team
 // =========================================================================
 
 #[test]
-fn team_claimed_derives_from_rejuv_grants_with_threshold() {
+fn team_killed_sourced_from_rejuv_killing_team() {
     let mut tracker = MidBossTracker::new();
     tracker.handle_spawn(60.0);
-    tracker.handle_kill(2, 180.0, 0.0, 0.0, 0.0, 3);
+    simulate_damage_and_kill(&mut tracker, 175.0, 180.0);
 
-    // Team 3 gets 2 grant events (event_type=6) -- meets threshold
-    tracker.handle_rejuv_status(181.0, 10, 3, 2, 6);
-    tracker.handle_rejuv_status(181.5, 11, 3, 2, 6);
-    // Team 2 (the killer) gets only 1 grant -- below threshold
-    tracker.handle_rejuv_status(182.0, 12, 2, 2, 6);
+    // Three clean grants to team 2, killing_team=2 stamped on each.
+    tracker.handle_rejuv_status(176.0, 10, 2, 2, 6);
+    tracker.handle_rejuv_status(176.5, 11, 2, 2, 6);
+    tracker.handle_rejuv_status(177.0, 12, 2, 2, 6);
 
     tracker.finalize();
 
-    // team_claimed should be 3 (the team that stole), not 2 (the killer)
-    assert_eq!(tracker.kill_events[0].team, 2);
-    assert_eq!(tracker.kill_events[0].team_claimed, 3);
+    let kill = &tracker.kill_events[0];
+    assert_eq!(kill.team_killed, 2, "team_killed must come from rejuv.killing_team");
+    assert_eq!(kill.team_claimed, 2);
+    assert_eq!(kill.rejuvs_by_team.get("2"), Some(&3));
+    assert_eq!(kill.rejuvs_by_team.get("3"), Some(&0));
 }
 
 #[test]
-fn team_claimed_falls_back_to_killing_team_when_no_grants() {
+fn team_killed_falls_back_to_zero_when_no_rejuv_events() {
     let mut tracker = MidBossTracker::new();
     tracker.handle_spawn(60.0);
-    tracker.handle_kill(2, 180.0, 0.0, 0.0, 0.0, 3);
-    // No rejuv grant events at all
+    simulate_damage_and_kill(&mut tracker, 175.0, 180.0);
+    // No rejuv events at all.
 
     tracker.finalize();
 
-    // Fallback: team_claimed == team
-    assert_eq!(tracker.kill_events[0].team_claimed, 2);
+    let kill = &tracker.kill_events[0];
+    assert_eq!(kill.team_killed, 0);
+    assert_eq!(kill.team_claimed, 0);
+    assert_eq!(kill.rejuvs_by_team.get("2"), Some(&0));
+    assert_eq!(kill.rejuvs_by_team.get("3"), Some(&0));
+}
+
+// =========================================================================
+// team_claimed derivation (strict majority 2-of-3)
+// =========================================================================
+
+#[test]
+fn team_claimed_equals_team_killed_on_clean_kill() {
+    let mut tracker = MidBossTracker::new();
+    tracker.handle_spawn(60.0);
+    simulate_damage_and_kill(&mut tracker, 175.0, 180.0);
+
+    // Clean kill: team 2 kills and gets all 3 grants.
+    tracker.handle_rejuv_status(176.0, 10, 2, 2, 6);
+    tracker.handle_rejuv_status(176.5, 11, 2, 2, 6);
+    tracker.handle_rejuv_status(177.0, 12, 2, 2, 6);
+
+    tracker.finalize();
+
+    let kill = &tracker.kill_events[0];
+    assert_eq!(kill.team_killed, 2);
+    assert_eq!(kill.team_claimed, 2);
 }
 
 #[test]
-fn team_claimed_falls_back_when_no_team_meets_threshold() {
+fn team_claimed_diverges_from_team_killed_on_2v1_steal() {
     let mut tracker = MidBossTracker::new();
     tracker.handle_spawn(60.0);
-    tracker.handle_kill(2, 180.0, 0.0, 0.0, 0.0, 3);
+    simulate_damage_and_kill(&mut tracker, 175.0, 180.0);
 
-    // Each team gets only 1 grant -- neither meets threshold of 2
-    tracker.handle_rejuv_status(181.0, 10, 2, 2, 6);
-    tracker.handle_rejuv_status(181.5, 11, 3, 2, 6);
+    // Steal: team 2 killed (killing_team=2) but team 3 got 2 of 3 grants.
+    tracker.handle_rejuv_status(176.0, 10, 3, 2, 6);
+    tracker.handle_rejuv_status(176.5, 11, 3, 2, 6);
+    tracker.handle_rejuv_status(177.0, 12, 2, 2, 6);
 
     tracker.finalize();
 
-    // Fallback to killing team
-    assert_eq!(tracker.kill_events[0].team_claimed, 2);
+    let kill = &tracker.kill_events[0];
+    assert_eq!(kill.team_killed, 2);
+    assert_eq!(kill.team_claimed, 3, "team with strict majority (2 of 3) wins");
+    assert_eq!(kill.rejuvs_by_team.get("2"), Some(&1));
+    assert_eq!(kill.rejuvs_by_team.get("3"), Some(&2));
 }
 
 #[test]
-fn team_claimed_correct_for_normal_kill_by_same_team() {
+fn non_grant_event_types_do_not_affect_team_claimed() {
     let mut tracker = MidBossTracker::new();
     tracker.handle_spawn(60.0);
-    tracker.handle_kill(2, 180.0, 0.0, 0.0, 0.0, 3);
+    simulate_damage_and_kill(&mut tracker, 175.0, 180.0);
 
-    // Team 2 (the killer) gets 3 grants -- well over threshold
-    tracker.handle_rejuv_status(181.0, 10, 2, 2, 6);
-    tracker.handle_rejuv_status(181.5, 11, 2, 2, 6);
-    tracker.handle_rejuv_status(182.0, 12, 2, 2, 6);
+    // Event types 7/8 are consume/expire -- should not count for claiming.
+    // killing_team is still observed (so team_killed is populated), but no
+    // event_type=6 grants means fallback to killing team.
+    tracker.handle_rejuv_status(176.0, 10, 3, 2, 7);
+    tracker.handle_rejuv_status(177.0, 11, 3, 2, 8);
+    tracker.handle_rejuv_status(178.0, 12, 3, 2, 7);
 
     tracker.finalize();
 
-    assert_eq!(tracker.kill_events[0].team_claimed, 2);
+    let kill = &tracker.kill_events[0];
+    assert_eq!(kill.team_killed, 2);
+    assert_eq!(kill.team_claimed, 2, "no grants -> fallback to killing team");
+    assert_eq!(kill.rejuvs_by_team.get("2"), Some(&0));
+    assert_eq!(kill.rejuvs_by_team.get("3"), Some(&0));
+}
+
+// =========================================================================
+// Attribution window: last-damage anchor + 30s
+// =========================================================================
+
+#[test]
+fn rejuv_events_before_last_damage_anchor_not_attributed() {
+    let mut tracker = MidBossTracker::new();
+    tracker.handle_spawn(60.0);
+    // Last damage at 175, kill message at 180.
+    simulate_damage_and_kill(&mut tracker, 175.0, 180.0);
+
+    // Rejuv BEFORE the last-damage anchor -- should be excluded.
+    tracker.handle_rejuv_status(170.0, 100, 3, 3, 6);
+    tracker.handle_rejuv_status(171.0, 101, 3, 3, 6);
+
+    tracker.finalize();
+
+    let kill = &tracker.kill_events[0];
+    assert_eq!(kill.team_killed, 0, "no rejuv inside window -> no killing team");
+    assert_eq!(kill.rejuvs_by_team.get("3"), Some(&0));
+}
+
+#[test]
+fn rejuv_events_past_30s_lookahead_not_attributed() {
+    let mut tracker = MidBossTracker::new();
+    tracker.handle_spawn(60.0);
+    // Anchor = 175 (last damage); window closes at 205.
+    simulate_damage_and_kill(&mut tracker, 175.0, 180.0);
+
+    // Rejuv grants at 210 (beyond 30s lookahead) -- excluded.
+    tracker.handle_rejuv_status(210.0, 100, 2, 2, 6);
+    tracker.handle_rejuv_status(210.5, 101, 2, 2, 6);
+
+    tracker.finalize();
+
+    let kill = &tracker.kill_events[0];
+    assert_eq!(kill.rejuvs_by_team.get("2"), Some(&0));
+}
+
+#[test]
+fn rejuv_attribution_across_two_kills_assigns_to_correct_kill() {
+    let mut tracker = MidBossTracker::new();
+
+    // Kill 1: last damage at 175, kill message at 180.
+    tracker.handle_spawn(60.0);
+    simulate_damage_and_kill(&mut tracker, 175.0, 180.0);
+    // Grants for kill 1 (team 2 clean).
+    tracker.handle_rejuv_status(182.0, 100, 2, 2, 6);
+    tracker.handle_rejuv_status(183.0, 101, 2, 2, 6);
+    tracker.handle_rejuv_status(184.0, 102, 2, 2, 6);
+
+    // Kill 2: last damage at 595, kill message at 600.
+    tracker.handle_spawn(420.0);
+    simulate_damage_and_kill(&mut tracker, 595.0, 600.0);
+    // Grants for kill 2 (2-1 steal: team 3 wins majority, team 2 was killer).
+    tracker.handle_rejuv_status(602.0, 200, 3, 3, 6);
+    tracker.handle_rejuv_status(603.0, 201, 3, 3, 6);
+    tracker.handle_rejuv_status(604.0, 202, 2, 3, 6);
+
+    tracker.finalize();
+    let data = tracker.get_output();
+
+    assert_eq!(data.kill_events.len(), 2);
+
+    let k1 = &data.kill_events[0];
+    assert_eq!(k1.team_killed, 2);
+    assert_eq!(k1.team_claimed, 2);
+    assert_eq!(k1.rejuvs_by_team.get("2"), Some(&3));
+    assert_eq!(k1.rejuvs_by_team.get("3"), Some(&0));
+
+    let k2 = &data.kill_events[1];
+    assert_eq!(k2.team_killed, 3);
+    assert_eq!(k2.team_claimed, 3);
+    assert_eq!(k2.rejuvs_by_team.get("2"), Some(&1));
+    assert_eq!(k2.rejuvs_by_team.get("3"), Some(&2));
 }
 
 // =========================================================================
@@ -244,19 +377,22 @@ fn team_claimed_correct_for_normal_kill_by_same_team() {
 // =========================================================================
 
 #[test]
-fn get_output_returns_collected_data() {
+fn get_output_populates_post_match_without_team_claimed() {
     let mut tracker = MidBossTracker::new();
     tracker.handle_spawn(60.0);
-    tracker.handle_kill(2, 180.0, 1.0, 2.0, 3.0, 3);
+    simulate_damage_and_kill(&mut tracker, 175.0, 180.0);
+    tracker.handle_rejuv_status(176.0, 10, 2, 2, 6);
+    tracker.handle_rejuv_status(176.5, 11, 2, 2, 6);
+    tracker.handle_rejuv_status(177.0, 12, 2, 2, 6);
     tracker.finalize();
 
     let data = tracker.get_output();
-    assert_eq!(data.spawn_events.len(), 1);
-    assert_eq!(data.kill_events.len(), 1);
     assert_eq!(data.post_match.len(), 1);
-    assert_eq!(data.post_match[0].team_killed, 2);
-    assert_eq!(data.post_match[0].team_claimed, 2);
-    assert_eq!(data.post_match[0].destroyed_time_s, 180);
+    let pm = &data.post_match[0];
+    assert_eq!(pm.team_killed, 2);
+    assert_eq!(pm.destroyed_time_s, 180);
+    assert_eq!(pm.rejuvs_by_team.get("2"), Some(&3));
+    assert_eq!(pm.rejuvs_by_team.get("3"), Some(&0));
 }
 
 // =========================================================================
@@ -310,12 +446,12 @@ fn fight_window_across_spawn_cycles_has_correct_spawn_cycle() {
     // Cycle 1: spawn, damage, kill
     tracker.handle_spawn(60.0);
     tracker.record_damage(10000, 65.0);
-    tracker.handle_kill(2, 70.0, 0.0, 0.0, 0.0, 3);
+    tracker.handle_kill(70.0, 0.0, 0.0, 0.0, 3);
 
     // Cycle 2: spawn, damage, kill
     tracker.handle_spawn(480.0);
     tracker.record_damage(15000, 490.0);
-    tracker.handle_kill(3, 500.0, 0.0, 0.0, 0.0, 2);
+    tracker.handle_kill(500.0, 0.0, 0.0, 0.0, 2);
 
     tracker.finalize();
     let data = tracker.get_output();
@@ -325,107 +461,6 @@ fn fight_window_across_spawn_cycles_has_correct_spawn_cycle() {
     assert_eq!(data.fight_windows[1].spawn_cycle, 2);
     assert_eq!(data.fight_windows[0].health_at_end, 0, "first kill closes window at 0");
     assert_eq!(data.fight_windows[1].health_at_end, 0, "second kill closes window at 0");
-}
-
-// =========================================================================
-// Critical gap: multi-kill rejuv attribution
-// =========================================================================
-
-#[test]
-fn rejuv_attribution_across_two_kills_assigns_to_correct_kill() {
-    let mut tracker = MidBossTracker::new();
-
-    // Kill 1 at t=180
-    tracker.handle_spawn(60.0);
-    tracker.handle_kill(2, 180.0, 0.0, 0.0, 0.0, 3);
-    // Rejuv grants for kill 1 (after kill at t=180)
-    tracker.handle_rejuv_status(182.0, 100, 2, 2, 6);
-    tracker.handle_rejuv_status(183.0, 101, 2, 2, 6);
-
-    // Kill 2 at t=600
-    tracker.handle_spawn(420.0);
-    tracker.handle_kill(3, 600.0, 0.0, 0.0, 0.0, 2);
-    // Rejuv grants for kill 2 (after kill at t=600)
-    tracker.handle_rejuv_status(602.0, 200, 3, 3, 6);
-    tracker.handle_rejuv_status(603.0, 201, 3, 3, 6);
-    tracker.handle_rejuv_status(604.0, 202, 2, 3, 6); // steal: one grant to team 2
-
-    tracker.finalize();
-    let data = tracker.get_output();
-
-    assert_eq!(data.kill_events.len(), 2);
-    // Kill 1: team 2 killed, team 2 claimed (2 grants)
-    assert_eq!(data.kill_events[0].team_claimed, 2);
-    // Kill 2: team 3 killed, team 3 claimed (2 grants vs 1 for team 2)
-    assert_eq!(data.kill_events[1].team_claimed, 3);
-}
-
-#[test]
-fn rejuv_events_before_kill_time_not_attributed() {
-    let mut tracker = MidBossTracker::new();
-    tracker.handle_spawn(60.0);
-
-    // Rejuv event BEFORE the kill (shouldn't count)
-    tracker.handle_rejuv_status(170.0, 100, 3, 3, 6);
-    tracker.handle_rejuv_status(171.0, 101, 3, 3, 6);
-
-    // Kill at t=180
-    tracker.handle_kill(2, 180.0, 0.0, 0.0, 0.0, 3);
-
-    tracker.finalize();
-    let data = tracker.get_output();
-
-    // No grants in [180, 210] window, so fallback to killing team
-    assert_eq!(data.kill_events[0].team_claimed, 2, "pre-kill rejuv events should be excluded");
-}
-
-// =========================================================================
-// Critical gap: team_claimed tie-break
-// =========================================================================
-
-#[test]
-fn team_claimed_tie_falls_back_to_killing_team_when_equal_grants() {
-    let mut tracker = MidBossTracker::new();
-    tracker.handle_spawn(60.0);
-    tracker.handle_kill(2, 180.0, 0.0, 0.0, 0.0, 3);
-
-    // Equal grants: 2 each -- both meet threshold but tied
-    tracker.handle_rejuv_status(182.0, 100, 2, 2, 6);
-    tracker.handle_rejuv_status(183.0, 101, 2, 2, 6);
-    tracker.handle_rejuv_status(184.0, 200, 3, 2, 6);
-    tracker.handle_rejuv_status(185.0, 201, 3, 2, 6);
-
-    tracker.finalize();
-    let data = tracker.get_output();
-
-    // Both teams have 2 grants (>= threshold). max_by_key picks one --
-    // the exact team is non-deterministic due to HashMap iteration order.
-    // Either team is acceptable; the important thing is it doesn't panic
-    // and doesn't fall back to killing team (since both meet threshold).
-    let claimed = data.kill_events[0].team_claimed;
-    assert!(claimed == 2 || claimed == 3, "tie should pick one team, not crash");
-}
-
-// =========================================================================
-// Important gap: non-grant event types don't affect team_claimed
-// =========================================================================
-
-#[test]
-fn non_grant_event_types_do_not_affect_team_claimed() {
-    let mut tracker = MidBossTracker::new();
-    tracker.handle_spawn(60.0);
-    tracker.handle_kill(2, 180.0, 0.0, 0.0, 0.0, 3);
-
-    // Event types 7 and 8 are consume/expire -- should not count for claiming
-    tracker.handle_rejuv_status(182.0, 100, 3, 2, 7);
-    tracker.handle_rejuv_status(183.0, 101, 3, 2, 8);
-    tracker.handle_rejuv_status(184.0, 102, 3, 2, 7);
-
-    tracker.finalize();
-    let data = tracker.get_output();
-
-    // No event_type==6 grants, so fallback to killing team
-    assert_eq!(data.kill_events[0].team_claimed, 2);
 }
 
 // =========================================================================

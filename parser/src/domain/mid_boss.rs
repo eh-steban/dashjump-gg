@@ -1,5 +1,7 @@
 //! Domain types for mid-boss tracking
 
+use std::collections::BTreeMap;
+
 use serde::Serialize;
 
 /// All mid-boss data collected during a match.
@@ -23,14 +25,15 @@ pub struct MidBossSpawnEvent {
 
 /// Fired when the mid-boss is killed (CCitadelUserMsg_BossKilled, ID 347,
 /// filtered to entity_killed_class == MID_BOSS_CLASS_ID).
+///
+/// team_killed, team_claimed, and rejuvs_by_team are all derived by finalize()
+/// from rejuv grant events. See references.md in the contracts spec.
 #[derive(Debug, Serialize, Clone)]
 pub struct MidBossKillEvent {
     pub spawn_cycle: u32,
-    /// Team that dealt the killing blow (objective_team from proto).
-    pub team: i32,
-    /// Team that claims the kill benefit. Derived by finalize() from rejuv grants;
-    /// defaults to `team` when no unambiguous grant is observed.
+    pub team_killed: i32,
     pub team_claimed: i32,
+    pub rejuvs_by_team: BTreeMap<String, u32>,
     pub matchtime_s: f32,
     pub x: f32,
     pub y: f32,
@@ -70,6 +73,6 @@ pub struct HealthSample {
 #[derive(Debug, Serialize, Default, Clone)]
 pub struct MidBossPostMatch {
     pub team_killed: i32,
-    pub team_claimed: i32,
+    pub rejuvs_by_team: BTreeMap<String, u32>,
     pub destroyed_time_s: u32,
 }

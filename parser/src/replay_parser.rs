@@ -810,17 +810,17 @@ impl Visitor for &mut MyVisitor {
         }
 
         // BossKilled (ID 347) -- filter to mid-boss via entity_killed_class == MID_BOSS_CLASS_ID.
+        // We ignore msg.objective_team (always 4/neutral for CNPC_MidBoss) and
+        // msg.gametime (lags actual death by 7-18s on observed replays). team_killed
+        // comes from RejuvStatus in finalize(); the kill time is the parser's own
+        // tick-based matchtime at the BossKilled message, used for position only.
         if packet_type == CitadelUserMessageIds::KEUserMsgBossKilled as u32 {
             let msg = CCitadelUserMsgBossKilled::decode(data)?;
             if msg.entity_killed_class == Some(MID_BOSS_CLASS_ID) {
                 let pos = msg.entity_position.as_ref();
-                // gametime is in demo-time coordinates (seconds since map load),
-                // same as m_flGameStartTime. Subtract match_start_time_s to get
-                // match-relative time. # TODO: verify with real replay data
-                let matchtime_s = msg.gametime.unwrap_or(0.0)
+                let matchtime_s = (ctx.tick() as f32 * ctx.tick_interval())
                     - self.match_start_time_s.map(|s| s as f32).unwrap_or(0.0);
                 self.mid_boss_tracker.handle_kill(
-                    msg.objective_team.unwrap_or(0),
                     matchtime_s,
                     pos.and_then(|p| p.x).unwrap_or(0.0),
                     pos.and_then(|p| p.y).unwrap_or(0.0),

@@ -1,6 +1,6 @@
-//! Mid-boss entity tracking -- fight windows, spawn/kill lifecycle, and team_claimed derivation.
+//! Mid-boss entity tracking -- fight windows, spawn/kill lifecycle, and rejuv attribution.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use haste::entities::Entity;
 use haste::fxhash;
@@ -22,7 +22,17 @@ const FIGHT_WINDOW_GAP_S: f32 = 5.0;
 const REJUV_GRANT_EVENT_TYPE: i32 = 6;
 
 /// Minimum rejuv grant events for a team to be credited with claiming the mid-boss kill.
+/// With 3 grants per kill, strict majority (>= 2) always identifies a unique winner.
 const REJUV_GRANT_THRESHOLD: u32 = 2;
+
+/// Seconds after the fight window's last-damage anchor to accept rejuv events into
+/// a kill's attribution window. See references.md "attribution window" in contracts.
+const REJUV_ATTRIBUTION_WINDOW_S: f32 = 30.0;
+
+/// `ECitadelLobbyTeam` values for the two playing sides. Used as keys in rejuvs_by_team
+/// so both teams always appear even when one has zero grants.
+const LOBBY_TEAM_AMBER: i32 = 2;
+const LOBBY_TEAM_SAPPHIRE: i32 = 3;
 
 /// Tracks mid-boss entities throughout the match.
 ///
@@ -108,11 +118,11 @@ impl MidBossTracker {
     /// Called when CCitadelUserMsg_BossKilled (ID 347) is received and
     /// entity_killed_class == MID_BOSS_CLASS_ID.
     ///
-    /// Closes any open fight window with health_at_end=0, then records the kill event.
-    /// team_claimed defaults to `team` here; finalize() corrects it from rejuv grants.
+    /// Closes any open fight window, anchoring window_end_s on last-damage time (not
+    /// kill time -- BossKilled.gametime lags actual death by 7-18s on observed replays).
+    /// Kill-event team fields are placeholders; finalize() populates them from rejuv grants.
     pub fn handle_kill(
         &mut self,
-        team: i32,
         matchtime_s: f32,
         x: f32,
         y: f32,
@@ -120,19 +130,21 @@ impl MidBossTracker {
         bosses_remaining: i32,
     ) {
         info!(
-            "[mid_boss_tracker] Kill event: spawn_cycle={} team={} matchtime_s={:.1} bosses_remaining={}",
-            self.current_spawn_cycle, team, matchtime_s, bosses_remaining
+            "[mid_boss_tracker] Kill event: spawn_cycle={} matchtime_s={:.1} bosses_remaining={}",
+            self.current_spawn_cycle, matchtime_s, bosses_remaining
         );
-        // Close the open fight window at kill time with health_at_end=0.
+        // Close the open fight window with health_at_end=0, anchored on last-damage
+        // time so the rejuv attribution window in finalize() sees grants that fire
+        // several seconds before BossKilled's lagging gametime.
         if let Some(window) = self.open_window.take() {
             debug!(
-                "[mid_boss_tracker] Closing fight window at kill: spawn_cycle={} window_start_s={:.1} window_end_s={:.1}",
-                window.spawn_cycle, window.window_start_s, matchtime_s
+                "[mid_boss_tracker] Closing fight window at kill: spawn_cycle={} window_start_s={:.1} last_damage_s={:.1} kill_s={:.1}",
+                window.spawn_cycle, window.window_start_s, window.last_damage_time_s, matchtime_s
             );
             self.fight_windows.push(FightWindow {
                 spawn_cycle: window.spawn_cycle,
                 window_start_s: window.window_start_s,
-                window_end_s: matchtime_s,
+                window_end_s: window.last_damage_time_s,
                 health_at_start: window.health_at_start,
                 health_at_end: 0,
                 health_samples: window.health_samples,
@@ -140,8 +152,9 @@ impl MidBossTracker {
         }
         self.kill_events.push(MidBossKillEvent {
             spawn_cycle: self.current_spawn_cycle,
-            team,
-            team_claimed: team, // corrected by finalize()
+            team_killed: 0,
+            team_claimed: 0,
+            rejuvs_by_team: empty_rejuvs_by_team(),
             matchtime_s,
             x,
             y,
@@ -260,14 +273,16 @@ impl MidBossTracker {
         }
     }
 
-    /// Called after parsing is complete. Closes any open fight window, then derives
-    /// team_claimed for each kill event by counting rejuv grant events (event_type == 6)
-    /// grouped by user_team within the kill's spawn cycle. The team with >= 2 grants wins.
-    /// Fallback to the killing team if no team meets the threshold.
+    /// Called after parsing is complete. Closes any open fight window, then sources
+    /// team_killed, team_claimed, and rejuvs_by_team for each kill from RejuvStatus
+    /// grants observed within the kill's attribution window. Populates post_match.
     ///
-    /// Also populates post_match summaries.
+    /// Attribution window is `[anchor, anchor + REJUV_ATTRIBUTION_WINDOW_S]`, where
+    /// anchor is the last-damage time (window_end_s) of the kill's matching fight
+    /// window. See references.md in the contracts spec for why we don't anchor on
+    /// BossKilled.gametime.
     pub fn finalize(&mut self) {
-        // Close any open fight window.
+        // Close any still-open fight window (match ends without a kill event).
         if let Some(window) = self.open_window.take() {
             debug!(
                 "[mid_boss_tracker] finalize: closing open fight window spawn_cycle={} end_s={:.1}",
@@ -283,71 +298,51 @@ impl MidBossTracker {
             });
         }
 
-        // Build per-kill attribution windows.
-        // Rejuv grant events fire AFTER the kill (boss dies, then grants flow to players).
-        // Window: [kill_time_s, next_kill_time_s) -- or unbounded for the last kill.
-        // A 30-second lookahead cap prevents attributing distant events to the wrong kill.
-        const REJUV_ATTRIBUTION_WINDOW_S: f32 = 30.0;
-
-        let kill_times: Vec<(u32, f32)> = self
+        // For each kill, anchor attribution on the last fight window matching its
+        // spawn_cycle (window_end_s = last damage time). Fall back to the kill's own
+        // matchtime_s if the cycle has no fight window -- defensive for synthetic
+        // tests that call handle_kill without prior record_damage.
+        let anchors: Vec<f32> = self
             .kill_events
             .iter()
-            .map(|k| (k.spawn_cycle, k.matchtime_s))
+            .map(|kill| self.attribution_anchor_for(kill.spawn_cycle, kill.matchtime_s))
             .collect();
 
-        // Derive team_claimed for each kill.
-        for kill in &mut self.kill_events {
-            let kill_time = kill.matchtime_s;
+        for (kill, anchor) in self.kill_events.iter_mut().zip(anchors.iter()) {
+            let window_end = anchor + REJUV_ATTRIBUTION_WINDOW_S;
 
-            // Upper bound: the earlier of (kill_time + cap) or the next kill's time.
-            let next_kill_time = kill_times
-                .iter()
-                .filter(|(_, t)| *t > kill_time)
-                .map(|(_, t)| *t)
-                .reduce(f32::min);
-            let window_end = match next_kill_time {
-                Some(t) => t.min(kill_time + REJUV_ATTRIBUTION_WINDOW_S),
-                None => kill_time + REJUV_ATTRIBUTION_WINDOW_S,
-            };
-
-            // Count event_type==6 rejuv grants per user_team within [kill_time, window_end].
-            let mut grants_by_team: HashMap<i32, u32> =
-                HashMap::new();
+            let mut rejuvs_by_team = empty_rejuvs_by_team();
+            let mut killing_team_seen: Option<i32> = None;
             for rejuv in &self.rejuv_events {
-                if rejuv.event_type == REJUV_GRANT_EVENT_TYPE
-                    && rejuv.matchtime_s >= kill_time
-                    && rejuv.matchtime_s <= window_end
-                {
-                    *grants_by_team.entry(rejuv.user_team).or_insert(0) += 1;
+                if rejuv.matchtime_s < *anchor || rejuv.matchtime_s > window_end {
+                    continue;
+                }
+                if killing_team_seen.is_none() {
+                    killing_team_seen = Some(rejuv.killing_team);
+                }
+                if rejuv.event_type == REJUV_GRANT_EVENT_TYPE {
+                    let key = rejuv.user_team.to_string();
+                    *rejuvs_by_team.entry(key).or_insert(0) += 1;
                 }
             }
 
-            // Team with >= REJUV_GRANT_THRESHOLD grants wins claimed credit.
-            let claimed = grants_by_team
-                .into_iter()
-                .filter(|(_, count)| *count >= REJUV_GRANT_THRESHOLD)
-                .max_by_key(|(_, count)| *count)
-                .map(|(team, _)| team);
+            kill.team_killed = killing_team_seen.unwrap_or(0);
+            kill.team_claimed = derive_team_claimed(&rejuvs_by_team, kill.team_killed);
+            kill.rejuvs_by_team = rejuvs_by_team;
 
-            if let Some(claiming_team) = claimed {
-                if claiming_team != kill.team {
-                    info!(
-                        "[mid_boss_tracker] Kill steal: spawn_cycle={} team_killed={} team_claimed={}",
-                        kill.spawn_cycle, kill.team, claiming_team
-                    );
-                }
-                kill.team_claimed = claiming_team;
-            } else {
-                // No clear grant winner -- fallback to killing team.
-                kill.team_claimed = kill.team;
+            if kill.team_killed != 0 && kill.team_claimed != kill.team_killed {
+                info!(
+                    "[mid_boss_tracker] Kill steal: spawn_cycle={} team_killed={} team_claimed={} rejuvs_by_team={:?}",
+                    kill.spawn_cycle, kill.team_killed, kill.team_claimed, kill.rejuvs_by_team
+                );
             }
         }
 
         // Populate post_match summaries from kill events.
         for kill in &self.kill_events {
             self.post_match.push(MidBossPostMatch {
-                team_killed: kill.team,
-                team_claimed: kill.team_claimed,
+                team_killed: kill.team_killed,
+                rejuvs_by_team: kill.rejuvs_by_team.clone(),
                 destroyed_time_s: kill.matchtime_s as u32,
             });
         }
@@ -359,6 +354,20 @@ impl MidBossTracker {
             self.fight_windows.len(),
             self.rejuv_events.len(),
         );
+    }
+
+    /// Returns the attribution anchor time for a kill in the given spawn cycle.
+    /// Uses the last fight window matching the cycle (its `window_end_s` is last-
+    /// damage time). Falls back to `kill_matchtime_s` when no fight window is
+    /// recorded for the cycle -- this path is exercised only by unit tests that
+    /// skip the damage pipeline.
+    fn attribution_anchor_for(&self, spawn_cycle: u32, kill_matchtime_s: f32) -> f32 {
+        self.fight_windows
+            .iter()
+            .rev()
+            .find(|w| w.spawn_cycle == spawn_cycle)
+            .map(|w| w.window_end_s)
+            .unwrap_or(kill_matchtime_s)
     }
 
     /// Returns all collected mid-boss data. Must be called after finalize().
@@ -373,6 +382,30 @@ impl MidBossTracker {
             post_match: self.post_match.clone(),
         }
     }
+}
+
+/// Returns a fresh `rejuvs_by_team` map with both team keys present and zeroed.
+/// Downstream consumers can then unconditionally read `["2"]` / `["3"]` without
+/// a missing-key branch.
+fn empty_rejuvs_by_team() -> BTreeMap<String, u32> {
+    let mut m = BTreeMap::new();
+    m.insert(LOBBY_TEAM_AMBER.to_string(), 0);
+    m.insert(LOBBY_TEAM_SAPPHIRE.to_string(), 0);
+    m
+}
+
+/// Picks the team with a strict majority (`>= REJUV_GRANT_THRESHOLD`) of rejuv
+/// grants. With 3 grants per kill, exactly one team always reaches the threshold,
+/// so this returns the unique winner for real matches. Falls back to
+/// `fallback_killing_team` for synthetic inputs that lack enough grants (unit
+/// tests, empty attribution windows).
+fn derive_team_claimed(rejuvs_by_team: &BTreeMap<String, u32>, fallback_killing_team: i32) -> i32 {
+    rejuvs_by_team
+        .iter()
+        .filter(|(_, count)| **count >= REJUV_GRANT_THRESHOLD)
+        .max_by_key(|(_, count)| **count)
+        .and_then(|(team, _)| team.parse::<i32>().ok())
+        .unwrap_or(fallback_killing_team)
 }
 
 #[cfg(test)]
