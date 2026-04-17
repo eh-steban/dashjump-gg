@@ -97,7 +97,6 @@ export const defaultMatchAnalysis: MatchAnalysisResponse = {
     sinners: [],
     mid_boss: {
       boss_name_hash: "16112031173533486177",
-      max_health: null,
       spawn_events: [],
       kill_events: [],
       rejuv_events: [],

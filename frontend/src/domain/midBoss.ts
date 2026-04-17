@@ -5,6 +5,10 @@
 export interface MidBossSpawnEvent {
   spawn_cycle: number;
   spawn_time_s: number;
+  // Per-cycle scaling: Deadlock rescales mid-boss max health each spawn
+  // (approx 13000 + 195 * match_minutes). Always read from the active spawn
+  // event -- there is no match-global max_health.
+  max_health: number;
 }
 
 export interface MidBossKillEvent {
@@ -54,7 +58,6 @@ export interface MidBossPostMatch {
 
 export interface MidBossData {
   boss_name_hash: string;
-  max_health: number | null;
   spawn_events: MidBossSpawnEvent[];
   kill_events: MidBossKillEvent[];
   rejuv_events: RejuvStatusEvent[];

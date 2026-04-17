@@ -18,7 +18,6 @@ import {
 
 const EMPTY_MID_BOSS: MidBossData = {
   boss_name_hash: '16112031173533486177',
-  max_health: null,
   spawn_events: [],
   kill_events: [],
   rejuv_events: [],
@@ -30,8 +29,12 @@ function makeMidBoss(overrides: Partial<MidBossData> = {}): MidBossData {
   return { ...EMPTY_MID_BOSS, ...overrides };
 }
 
-function spawn(spawn_cycle: number, spawn_time_s: number): MidBossSpawnEvent {
-  return { spawn_cycle, spawn_time_s };
+function spawn(
+  spawn_cycle: number,
+  spawn_time_s: number,
+  max_health = 14950
+): MidBossSpawnEvent {
+  return { spawn_cycle, spawn_time_s, max_health };
 }
 
 function kill(
@@ -161,29 +164,30 @@ describe('findActiveCycle', () => {
 // --------------------------------------------------------------------------
 
 describe('currentMidBossHealth', () => {
-  it('returns null when max_health is null', () => {
+  it('returns the active spawn event max_health before the first fight window opens', () => {
     const midBoss = makeMidBoss({
-      max_health: null,
-      spawn_events: [spawn(1, 600)],
-    });
-    const cycle = findActiveCycle(midBoss, 700)!;
-    expect(currentMidBossHealth(midBoss, cycle, 700)).toBeNull();
-  });
-
-  it('returns max_health before the first fight window opens', () => {
-    const midBoss = makeMidBoss({
-      max_health: 14950,
-      spawn_events: [spawn(1, 600)],
+      spawn_events: [spawn(1, 600, 14950)],
       fight_windows: [window(1, 800, 900, 14950, 5000)],
     });
     const cycle = findActiveCycle(midBoss, 700)!;
     expect(currentMidBossHealth(midBoss, cycle, 700)).toBe(14950);
   });
 
+  it('reads per-cycle max_health from the active spawn event, not a match-global value', () => {
+    // Cycle 2 scales higher than cycle 1: the bar must reflect the cycle 2
+    // value while scrubbing in cycle 2's window.
+    const midBoss = makeMidBoss({
+      spawn_events: [spawn(1, 600, 14950), spawn(2, 1200, 16900)],
+      kill_events: [kill(1, 900)],
+    });
+    const cycle2 = findActiveCycle(midBoss, 1300)!;
+    expect(cycle2.spawn_cycle).toBe(2);
+    expect(currentMidBossHealth(midBoss, cycle2, 1300)).toBe(16900);
+  });
+
   it('uses the most recent sample inside a fight window (step interpolation)', () => {
     const midBoss = makeMidBoss({
-      max_health: 14950,
-      spawn_events: [spawn(1, 600)],
+      spawn_events: [spawn(1, 600, 14950)],
       fight_windows: [
         window(1, 800, 900, 14950, 5000, [
           { time_s: 810, health: 12000 },
@@ -198,8 +202,7 @@ describe('currentMidBossHealth', () => {
 
   it('holds the health_at_end value between fight windows (bait-disengage)', () => {
     const midBoss = makeMidBoss({
-      max_health: 14950,
-      spawn_events: [spawn(1, 600)],
+      spawn_events: [spawn(1, 600, 14950)],
       fight_windows: [
         window(1, 800, 810, 14950, 13000),
         window(1, 900, 920, 13000, 0),
@@ -214,8 +217,7 @@ describe('currentMidBossHealth', () => {
     // the window and should reflect the 890 sample, not the post-window
     // health_at_end fallback.
     const midBoss = makeMidBoss({
-      max_health: 14950,
-      spawn_events: [spawn(1, 600)],
+      spawn_events: [spawn(1, 600, 14950)],
       fight_windows: [
         window(1, 800, 900, 14950, 3000, [
           { time_s: 890, health: 3000 },
@@ -228,8 +230,7 @@ describe('currentMidBossHealth', () => {
 
   it('uses health_at_start when inside a window but no sample yet passed', () => {
     const midBoss = makeMidBoss({
-      max_health: 14950,
-      spawn_events: [spawn(1, 600)],
+      spawn_events: [spawn(1, 600, 14950)],
       fight_windows: [
         window(1, 800, 900, 14950, 5000, [{ time_s: 820, health: 12000 }]),
       ],

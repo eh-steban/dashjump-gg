@@ -9,6 +9,7 @@ class HealthSample(SQLModel):
 class MidBossSpawnEvent(SQLModel):
     spawn_cycle: int
     spawn_time_s: float
+    max_health: int
 
 
 class MidBossKillEvent(SQLModel):
@@ -48,7 +49,6 @@ class MidBossPostMatch(SQLModel):
 
 class MidBossData(SQLModel):
     boss_name_hash: str
-    max_health: int | None = None
     spawn_events: list[MidBossSpawnEvent] = []
     kill_events: list[MidBossKillEvent] = []
     rejuv_events: list[RejuvStatusEvent] = []

@@ -6,7 +6,6 @@ import { MidBossData } from '../../../src/domain/midBoss';
 
 const EMPTY_MID_BOSS: MidBossData = {
   boss_name_hash: '16112031173533486177',
-  max_health: 14950,
   spawn_events: [],
   kill_events: [],
   rejuv_events: [],
@@ -26,7 +25,7 @@ describe('MidBossHealthBar', () => {
   it('hides the bar before mid-boss spawns', async () => {
     const midBoss: MidBossData = {
       ...EMPTY_MID_BOSS,
-      spawn_events: [{ spawn_cycle: 1, spawn_time_s: 600 }],
+      spawn_events: [{ spawn_cycle: 1, spawn_time_s: 600, max_health: 14950 }],
     };
     render(<MidBossHealthBar midBoss={midBoss} currentSec={500} />);
     expect(healthBar().length).toBe(0);
@@ -35,7 +34,7 @@ describe('MidBossHealthBar', () => {
   it('shows full health while alive before the first fight window', async () => {
     const midBoss: MidBossData = {
       ...EMPTY_MID_BOSS,
-      spawn_events: [{ spawn_cycle: 1, spawn_time_s: 600 }],
+      spawn_events: [{ spawn_cycle: 1, spawn_time_s: 600, max_health: 14950 }],
     };
     render(<MidBossHealthBar midBoss={midBoss} currentSec={700} />);
     const [bar] = healthBar();
@@ -46,7 +45,7 @@ describe('MidBossHealthBar', () => {
   it('reflects the current sample inside a fight window', async () => {
     const midBoss: MidBossData = {
       ...EMPTY_MID_BOSS,
-      spawn_events: [{ spawn_cycle: 1, spawn_time_s: 600 }],
+      spawn_events: [{ spawn_cycle: 1, spawn_time_s: 600, max_health: 14950 }],
       fight_windows: [
         {
           spawn_cycle: 1,
@@ -69,7 +68,7 @@ describe('MidBossHealthBar', () => {
   it('hides the bar after the kill and shows rejuv claim counts', async () => {
     const midBoss: MidBossData = {
       ...EMPTY_MID_BOSS,
-      spawn_events: [{ spawn_cycle: 1, spawn_time_s: 600 }],
+      spawn_events: [{ spawn_cycle: 1, spawn_time_s: 600, max_health: 14950 }],
       kill_events: [
         {
           spawn_cycle: 1,
@@ -121,17 +120,35 @@ describe('MidBossHealthBar', () => {
     expect(rejuvBlock().length).toBe(0);
   });
 
-  it('renders nothing when max_health is null even if a cycle would be active', async () => {
-    // max_health === null means the boss never spawned in this replay;
-    // the whole component (bar + rejuv fallback) should stay silent.
+  it('reflects the active cycle max_health, not cycle 1, when scrubbing cycle 2', async () => {
+    // Per-cycle scaling pin: a cycle-2 spawn at 20 min scales higher than
+    // the cycle-1 spawn at 10 min. The bar's aria-valuemax (and the visible
+    // divisor) must read from the active cycle, not the first cycle.
     const midBoss: MidBossData = {
       ...EMPTY_MID_BOSS,
-      max_health: null,
-      spawn_events: [{ spawn_cycle: 1, spawn_time_s: 600 }],
+      spawn_events: [
+        { spawn_cycle: 1, spawn_time_s: 600, max_health: 14950 },
+        { spawn_cycle: 2, spawn_time_s: 1200, max_health: 16900 },
+      ],
+      kill_events: [
+        {
+          spawn_cycle: 1,
+          team_killed: 2,
+          team_claimed: 2,
+          rejuvs_by_team: { "2": 0, "3": 0 },
+          matchtime_s: 900,
+          x: 0,
+          y: 0,
+          z: 0,
+          bosses_remaining: 0,
+        },
+      ],
     };
-    render(<MidBossHealthBar midBoss={midBoss} currentSec={700} />);
-    expect(healthBar().length).toBe(0);
-    expect(rejuvBlock().length).toBe(0);
+    render(<MidBossHealthBar midBoss={midBoss} currentSec={1300} />);
+    const [bar] = healthBar();
+    expect(bar).toBeDefined();
+    expect(bar.getAttribute('aria-valuemax')).toBe('16900');
+    expect(bar.getAttribute('aria-valuenow')).toBe('16900');
   });
 
   it('keeps the rejuv display visible long after the kill (no expiry in v1)', async () => {
@@ -141,7 +158,7 @@ describe('MidBossHealthBar', () => {
     // ephemeral display window will need to update it.
     const midBoss: MidBossData = {
       ...EMPTY_MID_BOSS,
-      spawn_events: [{ spawn_cycle: 1, spawn_time_s: 600 }],
+      spawn_events: [{ spawn_cycle: 1, spawn_time_s: 600, max_health: 14950 }],
       kill_events: [
         {
           spawn_cycle: 1,

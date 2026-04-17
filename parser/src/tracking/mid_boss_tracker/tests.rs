@@ -478,7 +478,6 @@ fn finalize_on_empty_tracker_is_noop() {
     assert_eq!(data.rejuv_events.len(), 0);
     assert_eq!(data.fight_windows.len(), 0);
     assert_eq!(data.post_match.len(), 0);
-    assert!(data.max_health.is_none());
 }
 
 // Mid-boss spawns at the 10-minute mark in every match. The differentiator is

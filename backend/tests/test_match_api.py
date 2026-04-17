@@ -140,7 +140,6 @@ class TestMatchAnalysisSchema:
         data = _make_transformed_match_data()
         reloaded = TransformedMatchData.model_validate_json(data.model_dump_json())
         assert reloaded.mid_boss.boss_name_hash == "11298616958347856125"
-        assert reloaded.mid_boss.max_health is None
         assert reloaded.mid_boss.spawn_events == []
         assert reloaded.mid_boss.kill_events == []
         assert reloaded.mid_boss.rejuv_events == []
@@ -155,8 +154,9 @@ class TestMatchAnalysisSchema:
         """
         mid_boss = MidBossData(
             boss_name_hash="11298616958347856125",
-            max_health=14950,
-            spawn_events=[MidBossSpawnEvent(spawn_cycle=1, spawn_time_s=600.0)],
+            spawn_events=[
+                MidBossSpawnEvent(spawn_cycle=1, spawn_time_s=600.0, max_health=14950)
+            ],
             kill_events=[
                 MidBossKillEvent(
                     spawn_cycle=1,
@@ -212,10 +212,10 @@ class TestMatchAnalysisSchema:
         )
 
         reloaded = TransformedMatchData.model_validate_json(data.model_dump_json())
-        assert reloaded.mid_boss.max_health == 14950
         assert len(reloaded.mid_boss.spawn_events) == 1
         assert reloaded.mid_boss.spawn_events[0].spawn_cycle == 1
         assert reloaded.mid_boss.spawn_events[0].spawn_time_s == 600.0
+        assert reloaded.mid_boss.spawn_events[0].max_health == 14950
         assert len(reloaded.mid_boss.kill_events) == 1
         kill = reloaded.mid_boss.kill_events[0]
         assert kill.team_killed == 2

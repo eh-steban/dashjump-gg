@@ -8,7 +8,6 @@ use serde::Serialize;
 #[derive(Debug, Serialize, Default, Clone)]
 pub struct MidBossData {
     pub boss_name_hash: String,
-    pub max_health: Option<i32>,
     pub spawn_events: Vec<MidBossSpawnEvent>,
     pub kill_events: Vec<MidBossKillEvent>,
     pub rejuv_events: Vec<RejuvStatusEvent>,
@@ -17,10 +16,14 @@ pub struct MidBossData {
 }
 
 /// Fired when the mid-boss spawns (CCitadelUserMsg_MidBossSpawned, ID 349).
+/// `max_health` is filled by `observe_entity` on the paired CREATE; `m_iMaxHealth`
+/// scales per-cycle (13000 + 195 * match_minutes), so storing it per spawn matches
+/// the data semantics -- there is no match-global mid-boss max health.
 #[derive(Debug, Serialize, Clone)]
 pub struct MidBossSpawnEvent {
     pub spawn_cycle: u32,
     pub spawn_time_s: f32,
+    pub max_health: i32,
 }
 
 /// Fired when the mid-boss is killed (CCitadelUserMsg_BossKilled, ID 347,

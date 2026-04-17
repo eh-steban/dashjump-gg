@@ -172,8 +172,9 @@ async def test_execute_wires_populated_mid_boss_end_to_end():
         "lane_creep_data": {"creeps": {}, "wave_meta": {}},
         "mid_boss": {
             "boss_name_hash": "11298616958347856125",
-            "max_health": 14950,
-            "spawn_events": [{"spawn_cycle": 1, "spawn_time_s": 600.0}],
+            "spawn_events": [
+                {"spawn_cycle": 1, "spawn_time_s": 600.0, "max_health": 14950}
+            ],
             "kill_events": [
                 {
                     "spawn_cycle": 1,
@@ -194,9 +195,9 @@ async def test_execute_wires_populated_mid_boss_end_to_end():
     result, _etag = await use_case.execute(12345, schema_version=1, session=MagicMock())
 
     assert result.mid_boss.boss_name_hash == "11298616958347856125"
-    assert result.mid_boss.max_health == 14950
     assert len(result.mid_boss.spawn_events) == 1
     assert result.mid_boss.spawn_events[0].spawn_time_s == 600.0
+    assert result.mid_boss.spawn_events[0].max_health == 14950
     assert len(result.mid_boss.kill_events) == 1
     assert result.mid_boss.kill_events[0].team_claimed == 3
 

@@ -66,9 +66,10 @@ export function findActiveCycle(
 
 /**
  * Returns the mid-boss's current health as an integer, or null when there's
- * nothing to display (no max_health, or no active cycle). Rendering logic:
+ * no active cycle. max_health is read from the active cycle's spawn event --
+ * Deadlock rescales the boss per cycle, so there is no match-global value.
  *
- * - Before the cycle's first fight window: full health (`max_health`).
+ * - Before the cycle's first fight window: full health (`spawn.max_health`).
  * - Inside a fight window: the most recent sample with `time_s <=
  *   currentSecond`. Step interpolation -- we don't linearly interpolate
  *   between samples, because samples are already emitted at significant state
@@ -81,13 +82,13 @@ export function currentMidBossHealth(
   cycle: MidBossCycleState,
   currentSecond: number
 ): number | null {
-  if (midBoss.max_health === null) return null;
+  const maxHealth = cycle.spawn.max_health;
 
   const windowsForCycle = midBoss.fight_windows
     .filter((w) => w.spawn_cycle === cycle.spawn_cycle)
     .sort((a, b) => a.window_start_s - b.window_start_s);
 
-  if (windowsForCycle.length === 0) return midBoss.max_health;
+  if (windowsForCycle.length === 0) return maxHealth;
 
   let lastClosedHealth: number | null = null;
   for (const window of windowsForCycle) {
@@ -99,7 +100,7 @@ export function currentMidBossHealth(
   }
 
   if (lastClosedHealth !== null) return lastClosedHealth;
-  return midBoss.max_health;
+  return maxHealth;
 }
 
 function sampleHealthAt(window: FightWindow, currentSecond: number): number {

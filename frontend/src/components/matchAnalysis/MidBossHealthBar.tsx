@@ -21,24 +21,21 @@ interface MidBossHealthBarProps {
 }
 
 const MidBossHealthBar = ({ midBoss, currentSec }: MidBossHealthBarProps) => {
-  // A null max_health means the mid-boss never spawned in this match --
-  // nothing to display at all, not even a rejuv claim fallback.
-  if (midBoss.max_health === null) return null;
-
   const cycle = findActiveCycle(midBoss, currentSec);
   if (!cycle) return <RecentClaim midBoss={midBoss} currentSec={currentSec} />;
 
   const health = currentMidBossHealth(midBoss, cycle, currentSec);
   if (health === null) return null;
 
-  const pct = Math.max(0, Math.min(1, health / midBoss.max_health));
+  const maxHealth = cycle.spawn.max_health;
+  const pct = Math.max(0, Math.min(1, health / maxHealth));
 
   return (
     <div className='mx-auto mt-2 w-full max-w-md md:max-w-lg lg:max-w-xl'>
       <div className='flex items-center justify-between text-xs font-semibold text-gray-700'>
         <span>Mid-Boss</span>
         <span>
-          {health.toLocaleString()} / {midBoss.max_health.toLocaleString()}
+          {health.toLocaleString()} / {maxHealth.toLocaleString()}
         </span>
       </div>
       <div
@@ -46,7 +43,7 @@ const MidBossHealthBar = ({ midBoss, currentSec }: MidBossHealthBarProps) => {
         role='progressbar'
         aria-label='Mid-Boss health'
         aria-valuemin={0}
-        aria-valuemax={midBoss.max_health}
+        aria-valuemax={maxHealth}
         aria-valuenow={health}
       >
         <div

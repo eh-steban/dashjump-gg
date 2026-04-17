@@ -12,7 +12,6 @@ const identityProjection = () => ({ left: 100, top: 100 });
 
 const EMPTY_MID_BOSS: MidBossData = {
   boss_name_hash: '16112031173533486177',
-  max_health: 14950,
   spawn_events: [],
   kill_events: [],
   rejuv_events: [],
@@ -28,7 +27,7 @@ describe('MidBossLayer', () => {
   it('renders nothing before the first spawn event', async () => {
     const midBoss: MidBossData = {
       ...EMPTY_MID_BOSS,
-      spawn_events: [{ spawn_cycle: 1, spawn_time_s: 600 }],
+      spawn_events: [{ spawn_cycle: 1, spawn_time_s: 600, max_health: 14950 }],
     };
     render(
       <MidBossLayer
@@ -43,7 +42,7 @@ describe('MidBossLayer', () => {
   it('renders the icon while the boss is alive', async () => {
     const midBoss: MidBossData = {
       ...EMPTY_MID_BOSS,
-      spawn_events: [{ spawn_cycle: 1, spawn_time_s: 600 }],
+      spawn_events: [{ spawn_cycle: 1, spawn_time_s: 600, max_health: 14950 }],
       kill_events: [
         {
           spawn_cycle: 1,
@@ -72,7 +71,7 @@ describe('MidBossLayer', () => {
     // Regression guard: catches off-by-half-size centering math.
     const midBoss: MidBossData = {
       ...EMPTY_MID_BOSS,
-      spawn_events: [{ spawn_cycle: 1, spawn_time_s: 600 }],
+      spawn_events: [{ spawn_cycle: 1, spawn_time_s: 600, max_health: 14950 }],
     };
     render(
       <MidBossLayer
@@ -92,7 +91,7 @@ describe('MidBossLayer', () => {
   it('removes the icon at the kill time (exclusive upper bound)', async () => {
     const midBoss: MidBossData = {
       ...EMPTY_MID_BOSS,
-      spawn_events: [{ spawn_cycle: 1, spawn_time_s: 600 }],
+      spawn_events: [{ spawn_cycle: 1, spawn_time_s: 600, max_health: 14950 }],
       kill_events: [
         {
           spawn_cycle: 1,
@@ -120,7 +119,7 @@ describe('MidBossLayer', () => {
   it('keeps the icon visible when the match ends without a kill', async () => {
     const midBoss: MidBossData = {
       ...EMPTY_MID_BOSS,
-      spawn_events: [{ spawn_cycle: 1, spawn_time_s: 600 }],
+      spawn_events: [{ spawn_cycle: 1, spawn_time_s: 600, max_health: 14950 }],
     };
     render(
       <MidBossLayer

@@ -44,8 +44,6 @@ const LOBBY_TEAM_SAPPHIRE: i32 = 3;
 pub struct MidBossTracker {
     /// FNV/FX hash of the mid-boss entity class name, stored as a string for serialization.
     boss_name_hash: String,
-    /// Max health read from the entity on CREATE (m_iMaxHealth).
-    max_health: Option<i32>,
 
     /// Entity index of the currently active mid-boss entity. Updated on CREATE/UPDATE.
     mid_boss_entity_index: Option<i32>,
@@ -83,7 +81,6 @@ impl MidBossTracker {
         let boss_name_hash = fxhash::hash_bytes(b"CNPC_MidBoss").to_string();
         Self {
             boss_name_hash,
-            max_health: None,
             mid_boss_entity_index: None,
             current_spawn_cycle: 0,
             spawn_events: Vec::new(),
@@ -109,9 +106,11 @@ impl MidBossTracker {
             "[mid_boss_tracker] Spawn event: spawn_cycle={} match_time_s={:.1}",
             self.current_spawn_cycle, match_time_s
         );
+        // max_health is a placeholder; observe_entity fills it on the paired CREATE.
         self.spawn_events.push(MidBossSpawnEvent {
             spawn_cycle: self.current_spawn_cycle,
             spawn_time_s: match_time_s,
+            max_health: 0,
         });
     }
 
@@ -187,8 +186,9 @@ impl MidBossTracker {
 
     /// Called from on_entity when the mid-boss entity is CREATEd or UPDATEd.
     ///
-    /// On CREATE: reads m_iMaxHealth and stores the entity index.
-    /// On UPDATE: stores the entity index (keeps it current if entity is recycled).
+    /// On CREATE: reads m_iMaxHealth and writes it to the current spawn event
+    /// (matches per-cycle scaling; `m_iMaxHealth = 13000 + 195 * match_minutes`).
+    /// On UPDATE: refreshes the entity index (keeps it current if entity is recycled).
     pub fn observe_entity(&mut self, entity_index: i32, entity: &Entity, is_create: bool) {
         self.mid_boss_entity_index = Some(entity_index);
         if is_create {
@@ -197,7 +197,11 @@ impl MidBossTracker {
                     "[mid_boss_tracker] Mid-boss CREATE: entity_index={} max_health={}",
                     entity_index, max_hp
                 );
-                self.max_health = Some(max_hp);
+                // CREATE fires after the paired MidBossSpawned message, so the
+                // latest spawn_event is the one this entity belongs to.
+                if let Some(spawn) = self.spawn_events.last_mut() {
+                    spawn.max_health = max_hp;
+                }
             }
         }
     }
@@ -374,7 +378,6 @@ impl MidBossTracker {
     pub fn get_output(&self) -> MidBossData {
         MidBossData {
             boss_name_hash: self.boss_name_hash.clone(),
-            max_health: self.max_health,
             spawn_events: self.spawn_events.clone(),
             kill_events: self.kill_events.clone(),
             rejuv_events: self.rejuv_events.clone(),
