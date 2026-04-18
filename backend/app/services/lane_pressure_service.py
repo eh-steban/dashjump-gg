@@ -68,15 +68,18 @@ logger = get_logger(__name__)
 #     jsonb_array_elements(match_data->'bosses'->'snapshots') s
 #     WHERE match_id = <that match>;
 # and paste the values here.
-BOSS_HASH_GUARDIAN = 12946736302082733589       # CNPC_TrooperBoss
-BOSS_HASH_WALKER = 1942975293714691302          # CNPC_Boss_Tier2
-BOSS_HASH_BASE_GUARDIAN = 793562361056549792    # CNPC_BarrackBoss
-BOSS_HASH_SHRINE = 8292725763874089450          # CCitadel_Destroyable_Building
-BOSS_HASH_PATRON = 7814756300278693755          # CNPC_Boss_Tier3
+BOSS_HASH_GUARDIAN = "12946736302082733589"       # CNPC_TrooperBoss
+BOSS_HASH_WALKER = "1942975293714691302"          # CNPC_Boss_Tier2
+BOSS_HASH_BASE_GUARDIAN = "793562361056549792"    # CNPC_BarrackBoss
+BOSS_HASH_SHRINE = "8292725763874089450"          # CCitadel_Destroyable_Building
+BOSS_HASH_PATRON = "7814756300278693755"          # CNPC_Boss_Tier3
+# CNPC_MidBoss (16112031173533486177) is intentionally absent: the mid-boss is
+# tracked by mid_boss_tracker, not boss_tracker, and is never a lane-pressure
+# objective. Adding it to _BOSS_PRIORITY would corrupt objective sort order.
 
 # Attack priority (lower number = attacked first by creeps).
 # Keyed on boss_name_hash so the mapping stays anchored to constants.rs.
-_BOSS_PRIORITY: dict[int, int] = {
+_BOSS_PRIORITY: dict[str, int] = {
     BOSS_HASH_GUARDIAN: 1,
     BOSS_HASH_WALKER: 2,
     BOSS_HASH_BASE_GUARDIAN: 3,
@@ -335,7 +338,7 @@ class LanePressureCalculator:
         if zone_len <= 0:
             logger.error(
                 "Degenerate contested zone for wave=%s second=%d: "
-                "own_frontline(hash=%d) progresses %.0f >= target(hash=%d) progresses %.0f. "
+                "own_frontline(hash=%s) progresses %.0f >= target(hash=%s) progresses %.0f. "
                 "Check _BOSS_PRIORITY ordering and lane path waypoint order.",
                 wave_id,
                 second,
@@ -370,7 +373,7 @@ class LanePressureCalculator:
 
         A path must have at least two waypoints to be usable at the call site.
         """
-        by_key: dict[tuple[int, int, int], list[BossSnapshot]] = {}
+        by_key: dict[tuple[int, int, str], list[BossSnapshot]] = {}
         shrines_by_team: dict[int, list[BossSnapshot]] = {}
         patron_by_team: dict[int, BossSnapshot] = {}
         for s in boss_data.snapshots:
@@ -382,13 +385,13 @@ class LanePressureCalculator:
                 continue
             by_key.setdefault((s.team, s.lane, s.boss_name_hash), []).append(s)
 
-        def single(team: int, lane: int, hash_: int) -> Optional[tuple[float, float]]:
+        def single(team: int, lane: int, hash_: str) -> Optional[tuple[float, float]]:
             matches = by_key.get((team, lane, hash_), [])
             if not matches:
                 return None
             return (matches[0].x, matches[0].y)
 
-        def midpoint(team: int, lane: int, hash_: int) -> Optional[tuple[float, float]]:
+        def midpoint(team: int, lane: int, hash_: str) -> Optional[tuple[float, float]]:
             matches = by_key.get((team, lane, hash_), [])
             if not matches:
                 return None

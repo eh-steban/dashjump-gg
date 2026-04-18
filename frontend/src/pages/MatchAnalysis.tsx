@@ -5,6 +5,7 @@ import PlayerCards from '../components/matchAnalysis/PlayerCards';
 import ObjectiveInfoPanel from '../components/matchAnalysis/ObjectiveInfoPanel';
 import TeamDisplay from '../components/matchAnalysis/TeamDisplay';
 import MatchTimeViewer from '../components/matchAnalysis/MatchTimeViewer';
+import MidBossHealthBar from '../components/matchAnalysis/MidBossHealthBar';
 import DamageAnalysisSection from '../components/damageAnalysis/DamageAnalysisSection';
 import { ErrorMessage } from '../components/common/ErrorMessage';
 import { useErrorHandler } from '../hooks/useErrorHandler';
@@ -295,6 +296,11 @@ const MatchAnalysis = () => {
             stopRepeat={stopRepeat}
           />
 
+          <MidBossHealthBar
+            midBoss={parsedMatchData.mid_boss}
+            currentSec={currentTick}
+          />
+
           <div className='match-analysis'>
             <div className='grid grid-cols-[1fr_47vw] gap-3'>
               <div
@@ -335,6 +341,7 @@ const MatchAnalysis = () => {
                   laneCreepData={parsedMatchData.lane_creep_data}
                   worldToMinimapPixels={worldToMinimapPixels}
                   scaledSinnerSnapshots={scaledSinnerSnapshots}
+                  midBoss={parsedMatchData.mid_boss}
                 />
               </div>
             </div>

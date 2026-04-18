@@ -13,6 +13,7 @@ from app.domain.match_analysis import (
     Positions,
     TransformedMatchData,
 )
+from app.domain.mid_boss import MidBossData
 from app.domain.player import PlayerData
 from app.domain.sinner import SinnerSnapshot
 from app.repo.parsed_matches_repo import ParsedMatchesRepo
@@ -116,12 +117,17 @@ class AnalyzeMatchUseCase:
             )
 
         if has_demo and local_filename:
-            # Parse from local file
-            logger.info("Match %s: Using local demo file: %s", match_id, local_filename)
+            # Parse from local file (decompressed .dem lives in replays/,
+            # compressed .dem.bz2 lives in compressed-replays/).
+            local_dir = (
+                "/parser/src/compressed-replays"
+                if local_filename.endswith(".bz2")
+                else "/parser/src/replays"
+            )
+            local_path = f"{local_dir}/{local_filename}"
+            logger.info("Match %s: Using local demo file: %s", match_id, local_path)
             try:
-                encoded_filename = base64.urlsafe_b64encode(
-                    f"/parser/src/replays/{local_filename}".encode()
-                ).decode()
+                encoded_filename = base64.urlsafe_b64encode(local_path.encode()).decode()
 
                 parsed_json_resp = await self.parser_service.parse_demo(
                     encoded_filename
@@ -198,6 +204,7 @@ class AnalyzeMatchUseCase:
             bosses=BossData(**parsed_json_resp.get("bosses", {})),
             lane_creep_data=lane_creep_data,
             sinners=sinners_list,
+            mid_boss=MidBossData(**parsed_json_resp["mid_boss"]),
         )
 
         # Log compression metrics

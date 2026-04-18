@@ -89,7 +89,7 @@ impl BossTracker {
         let snapshot = BossSnapshot {
             entity_index: entity.index(),
             custom_id,
-            boss_name_hash: hash,
+            boss_name_hash: hash.to_string(),
             team,
             lane,
             x: position[0],

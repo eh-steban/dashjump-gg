@@ -44,5 +44,6 @@ class MatchDataService:
             bosses=parsed_match.bosses,
             lane_creep_data=parsed_match.lane_creep_data,
             sinners=parsed_match.sinners,
+            mid_boss=parsed_match.mid_boss,
             lane_pressure=lane_pressure,
         )

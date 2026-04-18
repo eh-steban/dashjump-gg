@@ -1,7 +1,7 @@
 export interface BossSnapshot {
   entity_index: number;
   custom_id: number; // Entity type ID (21, 25, 26, 27, 28)
-  boss_name_hash: number;
+  boss_name_hash: string;
   team: number;
   lane: number;
   x: number;
@@ -29,28 +29,22 @@ export interface BossData {
   health_timeline: BossHealthTimeline;
 }
 
-// Map boss_name_hash to human-readable boss type names
-// Hash values are fxhash of entity class names in the game
-// These hash values come from the parser.
-// TODO: These hard coded hash names changed and I'm unsure if
-// these are different between games or if the big update a
-// few weeks ago (date today: 3/3/26) broke things. Will
-// likely need to think of a more resilient option especially
-// if this changes every game. This change not only broke the
-// naming in the UI, but the sankey diagrams too (because there's
-// duplicate hash values and the diagrams don't like dupes).
+// Map boss_name_hash to human-readable boss type names.
+// Hash values are u64 fxhash::hash_bytes of the entity class name, transported
+// as decimal strings because JavaScript `number` cannot losslessly hold
+// integers above 2^53. Source of truth:
+// private/specs/contracts/parser-output.md Boss Type Identification table.
 const BOSS_NAME_HASH_MAP: Record<string, string> = {
-  '10648152268083397000': 'Guardian', // CNPC_TrooperBoss, custom_id=21
-  '14993025469191344000': 'Walker', // CNPC_Boss_Tier2, custom_id=28
-  '7661004720742107000': 'Base Guardian', // CNPC_BarrackBoss, custom_id=26
-  '3692976131341581000': 'Shrine', // CCitadel_Destroyable_Building, custom_id=27
-  '9121244462627342000': 'Patron', // CNPC_Boss_Tier3, custom_id=29
+  '12946736302082733589': 'Guardian',      // CNPC_TrooperBoss, custom_id=21
+  '1942975293714691302':  'Walker',        // CNPC_Boss_Tier2, custom_id=28
+  '793562361056549792':   'Base Guardian', // CNPC_BarrackBoss, custom_id=26
+  '8292725763874089450':  'Shrine',        // CCitadel_Destroyable_Building, custom_id=27
+  '7814756300278693755':  'Patron',        // CNPC_Boss_Tier3, custom_id=29
 };
 
 export function getBossDisplayName(boss: BossSnapshot): string {
-  const hashKey = String(boss.boss_name_hash);
   const typeName =
-    BOSS_NAME_HASH_MAP[hashKey] || `Boss #${boss.boss_name_hash}`;
+    BOSS_NAME_HASH_MAP[boss.boss_name_hash] || `Boss #${boss.boss_name_hash}`;
   const laneStr = boss.lane > 0 ? ` - Lane ${boss.lane}` : '';
   let bossName = `${typeName}${laneStr}`;
   if (typeName == 'Base Guardian' || typeName == 'Shrine') {

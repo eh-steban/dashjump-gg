@@ -16,6 +16,15 @@ from app.domain.boss import BossData
 from app.domain.creep import LaneCreepData
 from app.domain.deadlock_api import MatchMetadata, MatchInfoFields, MatchPaths
 from app.domain.lane_pressure import LanePressureData
+from app.domain.mid_boss import (
+    FightWindow,
+    HealthSample,
+    MidBossData,
+    MidBossKillEvent,
+    MidBossPostMatch,
+    MidBossSpawnEvent,
+    RejuvStatusEvent,
+)
 from app.domain.sinner import SinnerSnapshot
 from app.domain.exceptions import (
     DeadlockAPIError,
@@ -31,6 +40,10 @@ from app.application.use_cases.analyze_match import AnalyzeMatchUseCase
 # Helpers -- minimal valid domain objects
 # ---------------------------------------------------------------------------
 
+def _make_empty_mid_boss() -> MidBossData:
+    return MidBossData(boss_name_hash="11298616958347856125")
+
+
 def _make_transformed_match_data() -> TransformedMatchData:
     return TransformedMatchData(
         match_duration_s=1800,
@@ -39,6 +52,7 @@ def _make_transformed_match_data() -> TransformedMatchData:
         per_player_data={},
         bosses=BossData(snapshots=[], health_timeline=[]),
         lane_creep_data=LaneCreepData(creeps={}, wave_meta={}),
+        mid_boss=_make_empty_mid_boss(),
     )
 
 
@@ -106,7 +120,118 @@ class TestMatchAnalysisSchema:
         assert hasattr(data, "bosses")
         assert hasattr(data, "lane_creep_data")
         assert hasattr(data, "sinners")
+        assert hasattr(data, "mid_boss")
         assert hasattr(data, "lane_pressure")
+
+    def test_mid_boss_is_required(self):
+        """mid_boss has no default -- parser always emits it, so the model enforces that."""
+        with pytest.raises(Exception):
+            TransformedMatchData(
+                match_duration_s=1800,
+                match_start_time_s=0,
+                players_data=[],
+                per_player_data={},
+                bosses=BossData(snapshots=[], health_timeline=[]),
+                lane_creep_data=LaneCreepData(creeps={}, wave_meta={}),
+            )
+
+    def test_mid_boss_empty_data_round_trips(self):
+        """Empty mid_boss arrays must survive JSON round-trip without loss."""
+        data = _make_transformed_match_data()
+        reloaded = TransformedMatchData.model_validate_json(data.model_dump_json())
+        assert reloaded.mid_boss.boss_name_hash == "11298616958347856125"
+        assert reloaded.mid_boss.spawn_events == []
+        assert reloaded.mid_boss.kill_events == []
+        assert reloaded.mid_boss.rejuv_events == []
+        assert reloaded.mid_boss.fight_windows == []
+        assert reloaded.mid_boss.post_match == []
+
+    def test_mid_boss_populated_round_trips_via_json(self):
+        """Confirm the full MidBossData shape survives JSON round-trip.
+
+        Exercises every nested type (spawn/kill/rejuv/fight window/health
+        sample/post_match) with realistic field values from the parser.
+        """
+        mid_boss = MidBossData(
+            boss_name_hash="11298616958347856125",
+            spawn_events=[
+                MidBossSpawnEvent(spawn_cycle=1, spawn_time_s=600.0, max_health=14950)
+            ],
+            kill_events=[
+                MidBossKillEvent(
+                    spawn_cycle=1,
+                    team_killed=2,
+                    team_claimed=3,
+                    rejuvs_by_team={"2": 1, "3": 2},
+                    matchtime_s=942.5,
+                    x=0.0,
+                    y=0.0,
+                    z=-768.0,
+                    bosses_remaining=0,
+                )
+            ],
+            rejuv_events=[
+                RejuvStatusEvent(
+                    matchtime_s=943.0,
+                    player_pawn=123456,
+                    user_team=3,
+                    killing_team=2,
+                    event_type=6,
+                )
+            ],
+            fight_windows=[
+                FightWindow(
+                    spawn_cycle=1,
+                    window_start_s=920.0,
+                    window_end_s=942.5,
+                    health_at_start=14950,
+                    health_at_end=0,
+                    health_samples=[
+                        HealthSample(time_s=920.0, health=14950),
+                        HealthSample(time_s=942.5, health=0),
+                    ],
+                )
+            ],
+            post_match=[
+                MidBossPostMatch(
+                    team_killed=2,
+                    rejuvs_by_team={"2": 1, "3": 2},
+                    destroyed_time_s=942,
+                )
+            ],
+        )
+
+        data = TransformedMatchData(
+            match_duration_s=1800,
+            match_start_time_s=0,
+            players_data=[],
+            per_player_data={},
+            bosses=BossData(snapshots=[], health_timeline=[]),
+            lane_creep_data=LaneCreepData(creeps={}, wave_meta={}),
+            mid_boss=mid_boss,
+        )
+
+        reloaded = TransformedMatchData.model_validate_json(data.model_dump_json())
+        assert len(reloaded.mid_boss.spawn_events) == 1
+        assert reloaded.mid_boss.spawn_events[0].spawn_cycle == 1
+        assert reloaded.mid_boss.spawn_events[0].spawn_time_s == 600.0
+        assert reloaded.mid_boss.spawn_events[0].max_health == 14950
+        assert len(reloaded.mid_boss.kill_events) == 1
+        kill = reloaded.mid_boss.kill_events[0]
+        assert kill.team_killed == 2
+        assert kill.team_claimed == 3
+        assert kill.rejuvs_by_team == {"2": 1, "3": 2}
+        assert kill.matchtime_s == 942.5
+        assert kill.z == -768.0
+        assert len(reloaded.mid_boss.rejuv_events) == 1
+        assert reloaded.mid_boss.rejuv_events[0].event_type == 6
+        assert len(reloaded.mid_boss.fight_windows) == 1
+        window = reloaded.mid_boss.fight_windows[0]
+        assert window.health_at_end == 0
+        assert len(window.health_samples) == 2
+        assert window.health_samples[0].health == 14950
+        assert len(reloaded.mid_boss.post_match) == 1
+        assert reloaded.mid_boss.post_match[0].destroyed_time_s == 942
 
     def test_sinners_defaults_to_empty_list(self):
         data = _make_transformed_match_data()
@@ -149,6 +274,7 @@ class TestMatchAnalysisSchema:
             bosses=BossData(snapshots=[], health_timeline=[]),
             lane_creep_data=LaneCreepData(creeps={}, wave_meta={}),
             sinners=[snapshot, alive_snapshot],
+            mid_boss=_make_empty_mid_boss(),
         )
 
         json_str = data.model_dump_json()
@@ -202,6 +328,7 @@ class TestMatchAnalysisSchema:
         assert "bosses" in pd
         assert "lane_creep_data" in pd
         assert "sinners" in pd
+        assert "mid_boss" in pd
         assert "lane_pressure" in pd
 
 

@@ -10,7 +10,8 @@ use haste::demostream::CmdHeader;
 use haste::entities::{DeltaHeader, Entity, ehandle_to_index, fkey_from_path};
 use haste::parser::{Context, Parser, Visitor};
 use haste::valveprotos::deadlock::{
-    CCitadelUserMessageDamage, CCitadelUserMsgPostMatchDetails, CMsgMatchMetaDataContentsPatched,
+    CCitadelUserMessageDamage, CCitadelUserMsgBossKilled, CCitadelUserMsgMidBossSpawned,
+    CCitadelUserMsgPostMatchDetails, CCitadelUserMsgRejuvStatus, CMsgMatchMetaDataContentsPatched,
     CitadelUserMessageIds,
 };
 use prost::Message;
@@ -20,7 +21,8 @@ use crate::domain::{DamageRecord, Player, PlayerPosition};
 // Note: CreepSnapshot, LaneCreepData etc. are used via CreepTracker::get_output()
 use crate::entities::constants::*;
 use crate::entities::constants::MAX_HEALTH_KEY;
-use crate::tracking::{BossTracker, CreepTracker, SinnerTracker};
+use crate::entities::constants::MID_BOSS_CLASS_ID;
+use crate::tracking::{BossTracker, CreepTracker, MidBossTracker, SinnerTracker};
 use crate::utils::{get_entity_position, get_steam_id32};
 
 /// Thin error wrapper for the Visitor boundary.
@@ -48,6 +50,7 @@ struct MyVisitor {
     positions: Vec<Vec<PlayerPosition>>,
     boss_tracker: BossTracker,
     creep_tracker: CreepTracker,
+    mid_boss_tracker: MidBossTracker,
     sinner_tracker: SinnerTracker,
     lane_data_updated: bool,
     /// Serializer hashes for which we've already logged an "owned NPC attacker failed
@@ -61,6 +64,7 @@ impl Default for MyVisitor {
     fn default() -> Self {
         let boss_tracker = BossTracker::new();
         let creep_tracker = CreepTracker::new(boss_tracker.lane_key());
+        let mid_boss_tracker = MidBossTracker::new();
         let sinner_tracker = SinnerTracker::new();
         Self {
             current_match_second: 0,
@@ -73,6 +77,7 @@ impl Default for MyVisitor {
             positions: Vec::new(),
             boss_tracker,
             creep_tracker,
+            mid_boss_tracker,
             sinner_tracker,
             lane_data_updated: false,
             warned_unresolvable_attacker_classes: HashSet::new(),
@@ -81,6 +86,12 @@ impl Default for MyVisitor {
 }
 
 impl MyVisitor {
+    /// Finalize all trackers that require post-parse computation.
+    /// Must be called before get_match_data_json().
+    pub fn finalize_trackers(&mut self) {
+        self.mid_boss_tracker.finalize();
+    }
+
     /// Get final match data as JSON
     pub fn get_match_data_json(&self) -> serde_json::Value {
         let lane_creep_data = self.creep_tracker.get_output();
@@ -94,6 +105,7 @@ impl MyVisitor {
             "bosses": self.boss_tracker.get_output(),
             "lane_creep_data": lane_creep_data,
             "sinners": self.sinner_tracker.get_output(),
+            "mid_boss": self.mid_boss_tracker.get_output(),
         })
     }
 
@@ -150,7 +162,6 @@ impl MyVisitor {
             CCITADELPLAYERPAWN_ENTITY
                 | CNPC_TROOPERBOSS_ENTITY
                 | CNPC_TROOPERNEUTRAL_ENTITY
-                | CNPC_MIDBOSS_ENTITY
                 | CITEMXP_ENTITY
                 | CCITADEL_DESTROYABLE_BUILDING_ENTITY
                 | CNPC_BARRACKBOSS_ENTITY
@@ -252,7 +263,6 @@ impl MyVisitor {
             CNPC_TROOPERBOSS_ENTITY => 21,
             CNPC_TROOPERNEUTRAL_ENTITY => 22,
             CNPC_NEUTRAL_SINNERSSACRIFICE_ENTITY => 23,
-            CNPC_MIDBOSS_ENTITY => 24,
             CITEMXP_ENTITY => 25,
             CNPC_BARRACKBOSS_ENTITY => 26,
             CCITADEL_DESTROYABLE_BUILDING_ENTITY => 27,
@@ -279,6 +289,12 @@ impl MyVisitor {
             return self.get_custom_id(ctx, entity);
         }
         if self.boss_tracker.is_boss_entity(hash) {
+            return entity.index() as u32;
+        }
+        // Mid-boss appears as both attacker and victim in damage events but is not
+        // in get_custom_id's NPC match (fixed IDs would collide across spawn cycles).
+        // Use entity index for per-instance identity, mirroring the priest slide-trap pattern.
+        if hash == CNPC_MIDBOSS_ENTITY {
             return entity.index() as u32;
         }
         // Projectiles appear as damage sources but aren't position-tracked entities.
@@ -483,6 +499,20 @@ impl Visitor for &mut MyVisitor {
         // Only track creeps after match has started to avoid pre-match entities
         let match_started = self.match_start_time_s.is_some();
 
+        // Route mid-boss entity events to the mid-boss tracker.
+        // Mid-boss is no longer position-tracked -- its lifecycle is managed exclusively here.
+        if hash == CNPC_MIDBOSS_ENTITY {
+            match delta_header {
+                DeltaHeader::CREATE => {
+                    self.mid_boss_tracker.observe_entity(entity.index(), entity, true);
+                }
+                DeltaHeader::UPDATE => {
+                    self.mid_boss_tracker.observe_entity(entity.index(), entity, false);
+                }
+                _ => {}
+            }
+        }
+
         match delta_header {
             DeltaHeader::CREATE => {
                 if self.boss_tracker.is_boss_entity(hash) {
@@ -574,9 +604,7 @@ impl Visitor for &mut MyVisitor {
                 // heals, Patron phase 1->2 reset, Patron time-based scaling,
                 // and out-of-combat regen.
                 if self.boss_tracker.is_boss_entity(hash) {
-                    let match_time_s = self.total_match_time_s.saturating_sub(
-                        self.match_start_time_s.unwrap_or(0),
-                    );
+                    let match_time_s = self.current_match_second;
                     self.boss_tracker.handle_boss_update(entity, match_time_s);
                 }
                 // Update creep positions (only if match started).
@@ -705,6 +733,15 @@ impl Visitor for &mut MyVisitor {
                 self.boss_tracker.record_boss_damage(victim_idx, ctx, match_time_s)?;
             }
 
+            // Victim is the mid-boss -- record a health sample for fight window tracking.
+            if Some(victim_idx) == self.mid_boss_tracker.mid_boss_entity_index() {
+                if let Some(health) = victim.get_value::<i32>(&HEALTH_KEY) {
+                    let match_time_s_f = (ctx.tick() as f32 * ctx.tick_interval())
+                        - self.match_start_time_s.map(|s| s as f32).unwrap_or(0.0);
+                    self.mid_boss_tracker.record_damage(health, match_time_s_f);
+                }
+            }
+
             // Victim is a sinner -- track last attacker for kill attribution, and append
             // a Dealt event when the attacker resolves to a player slot. Non-player
             // attackers (troopers, unowned NPCs) still get kill attribution via
@@ -760,6 +797,51 @@ impl Visitor for &mut MyVisitor {
                 error!("[parse_replay] Failed to push damage record: {:?}", error);
                 return Err(error.into());
             }
+        }
+
+        // MidBossSpawned (ID 349) -- empty message, detected by packet_type only.
+        // Not in the CitadelUserMessageIds enum -- use the raw integer.
+        if packet_type == CitadelUserMessageIds::KEUserMsgMidBossSpawned as u32 {
+            let match_time_s_f = (ctx.tick() as f32 * ctx.tick_interval())
+                - self.match_start_time_s.map(|s| s as f32).unwrap_or(0.0);
+            // Decode to validate no unexpected data (empty message struct)
+            let _msg = CCitadelUserMsgMidBossSpawned::decode(data)?;
+            self.mid_boss_tracker.handle_spawn(match_time_s_f);
+        }
+
+        // BossKilled (ID 347) -- filter to mid-boss via entity_killed_class == MID_BOSS_CLASS_ID.
+        // We ignore msg.objective_team (always 4/neutral for CNPC_MidBoss) and
+        // msg.gametime (lags actual death by 7-18s on observed replays). team_killed
+        // comes from RejuvStatus in finalize(); the kill time is the parser's own
+        // tick-based matchtime at the BossKilled message, used for position only.
+        if packet_type == CitadelUserMessageIds::KEUserMsgBossKilled as u32 {
+            let msg = CCitadelUserMsgBossKilled::decode(data)?;
+            if msg.entity_killed_class == Some(MID_BOSS_CLASS_ID) {
+                let pos = msg.entity_position.as_ref();
+                let matchtime_s = (ctx.tick() as f32 * ctx.tick_interval())
+                    - self.match_start_time_s.map(|s| s as f32).unwrap_or(0.0);
+                self.mid_boss_tracker.handle_kill(
+                    matchtime_s,
+                    pos.and_then(|p| p.x).unwrap_or(0.0),
+                    pos.and_then(|p| p.y).unwrap_or(0.0),
+                    pos.and_then(|p| p.z).unwrap_or(0.0),
+                    msg.bosses_remaining.unwrap_or(0),
+                );
+            }
+        }
+
+        // RejuvStatus (ID 350) -- rejuvenation grant status for mid-boss kill claiming.
+        if packet_type == CitadelUserMessageIds::KEUserMsgRejuvStatus as u32 {
+            let msg = CCitadelUserMsgRejuvStatus::decode(data)?;
+            let match_time_s_f = (ctx.tick() as f32 * ctx.tick_interval())
+                - self.match_start_time_s.map(|s| s as f32).unwrap_or(0.0);
+            self.mid_boss_tracker.handle_rejuv_status(
+                match_time_s_f,
+                msg.player_pawn.unwrap_or(0),
+                msg.user_team.unwrap_or(0),
+                msg.killing_team.unwrap_or(0),
+                msg.event_type.unwrap_or(0),
+            );
         }
 
         // Handle post-match details (damage matrix)
@@ -826,5 +908,10 @@ pub async fn parse_replay(replay_full_path: &str) -> Result<serde_json::Value> {
         visitor.positions.len()
     );
 
+    visitor.finalize_trackers();
+
     Ok(visitor.get_match_data_json())
 }
+
+#[cfg(test)]
+mod tests;

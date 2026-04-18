@@ -6,7 +6,7 @@ use once_cell::sync::Lazy;
 use tokio::sync::Mutex;
 use std::sync::Arc;
 
-use crate::demo::{decode_demo_url, setup_compressed_replay_path, download_if_needed, decompress_replay};
+use crate::demo::{decode_demo_url, setup_replay_path, download_if_needed, decompress_replay};
 use crate::replay_parser;
 
 static FILE_MUTEXES: Lazy<DashMap<String, Arc<Mutex<()>>>> = Lazy::new(DashMap::new);
@@ -24,8 +24,8 @@ pub async fn parse_demo(Json(payload): Json<ParseRequest>) -> Response {
         Err((status, Json(val))) => return build_response(status, &val),
     };
 
-    let (filename, replay_path) = match setup_compressed_replay_path(&decoded_url) {
-        Ok((filename, replay_path)) => (filename, replay_path),
+    let (filename, replay_path) = match setup_replay_path(&decoded_url) {
+        Ok(v) => v,
         Err((status, Json(val))) => return build_response(status, &val),
     };
 
@@ -37,13 +37,33 @@ pub async fn parse_demo(Json(payload): Json<ParseRequest>) -> Response {
         .clone();
     let _guard = mutex.lock().await;
 
-    if let Err((status, Json(val))) = download_if_needed(&decoded_url, &replay_path).await {
-        return build_response(status, &val);
-    }
+    // Compressed inputs go through the download+decompress pipeline; decompressed
+    // inputs (local .dem already in replays_dir) skip straight to parsing.
+    let is_compressed = filename
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.eq_ignore_ascii_case("bz2"))
+        .unwrap_or(false);
 
-    let decompressed_path = match decompress_replay(&replay_path, &filename) {
-        Ok(path) => path,
-        Err((status, Json(val))) => return build_response(status, &val),
+    let decompressed_path = if is_compressed {
+        if let Err((status, Json(val))) = download_if_needed(&decoded_url, &replay_path).await {
+            return build_response(status, &val);
+        }
+        match decompress_replay(&replay_path, &filename) {
+            Ok(path) => path,
+            Err((status, Json(val))) => return build_response(status, &val),
+        }
+    } else {
+        if !replay_path.exists() {
+            error!("[parse_demo] Decompressed demo not found at {}", replay_path.display());
+            return build_response(
+                StatusCode::NOT_FOUND,
+                &serde_json::json!({
+                    "error": format!("Decompressed demo not found: {}", replay_path.display())
+                }),
+            );
+        }
+        replay_path.clone()
     };
 
     info!("[parse_demo] Starting replay parsing for: {}", decompressed_path.display());

@@ -5,7 +5,11 @@ from app.domain.exceptions import ParserServiceError, DeadlockAPIError
 from app.domain.match_analysis import TransformedMatchData
 from app.domain.boss import BossData
 from app.domain.creep import LaneCreepData
+from app.domain.mid_boss import MidBossData
 from app.domain.sinner import SinnerSnapshot
+
+
+_MID_BOSS_DICT = {"boss_name_hash": "11298616958347856125"}
 
 
 @pytest.mark.asyncio
@@ -26,6 +30,7 @@ async def test_execute_returns_cached_data_when_available():
         ),
         lane_creep_data=LaneCreepData(creeps={}, wave_meta={}),
         sinners=[],
+        mid_boss=MidBossData(**_MID_BOSS_DICT),
     )
     mock_repo.get_match_data.return_value = cached_data
 
@@ -56,6 +61,7 @@ async def test_execute_uses_local_demo_when_available():
         "positions": [],
         "bosses": {"snapshots": [], "health_timeline": []},
         "lane_creep_data": {"creeps": {}, "wave_meta": {}},
+        "mid_boss": _MID_BOSS_DICT,
     }
 
     use_case = AnalyzeMatchUseCase(mock_parser, mock_deadlock, mock_repo)
@@ -86,6 +92,7 @@ async def test_execute_falls_back_to_api_when_parser_check_fails():
         "positions": [],
         "bosses": {"snapshots": [], "health_timeline": []},
         "lane_creep_data": {"creeps": {}, "wave_meta": {}},
+        "mid_boss": _MID_BOSS_DICT,
     }
 
     use_case = AnalyzeMatchUseCase(mock_parser, mock_deadlock, mock_repo)
@@ -115,6 +122,7 @@ async def test_execute_falls_back_when_local_parse_fails():
             "bosses": {"snapshots": [], "health_timeline": []},
             "lane_creep_data": {"creeps": {}, "wave_meta": {}},
             "sinners": [],
+            "mid_boss": _MID_BOSS_DICT,
         },
     ]
     mock_deadlock.get_demo_url.return_value = {"demo_url": "http://example.com/demo.bz2"}
@@ -143,3 +151,126 @@ async def test_execute_raises_when_all_sources_fail():
 
     with pytest.raises(ParserServiceError):
         await use_case.execute(12345, schema_version=1, session=MagicMock())
+
+
+@pytest.mark.asyncio
+async def test_execute_wires_populated_mid_boss_end_to_end():
+    """A populated mid_boss payload from the parser must flow through to the result."""
+    mock_parser = AsyncMock()
+    mock_deadlock = AsyncMock()
+    mock_repo = AsyncMock()
+
+    mock_repo.get_match_data.return_value = None  # Cache miss
+    mock_parser.check_demo_available.return_value = (True, "12345_67890.dem")
+    mock_parser.parse_demo.return_value = {
+        "match_duration_s": 0,
+        "match_start_time_s": 0,
+        "players": [],
+        "damage": [],
+        "positions": [],
+        "bosses": {"snapshots": [], "health_timeline": []},
+        "lane_creep_data": {"creeps": {}, "wave_meta": {}},
+        "mid_boss": {
+            "boss_name_hash": "11298616958347856125",
+            "spawn_events": [
+                {"spawn_cycle": 1, "spawn_time_s": 600.0, "max_health": 14950}
+            ],
+            "kill_events": [
+                {
+                    "spawn_cycle": 1,
+                    "team_killed": 2,
+                    "team_claimed": 3,
+                    "rejuvs_by_team": {"2": 1, "3": 2},
+                    "matchtime_s": 942.5,
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -768.0,
+                    "bosses_remaining": 0,
+                }
+            ],
+        },
+    }
+
+    use_case = AnalyzeMatchUseCase(mock_parser, mock_deadlock, mock_repo)
+    result, _etag = await use_case.execute(12345, schema_version=1, session=MagicMock())
+
+    assert result.mid_boss.boss_name_hash == "11298616958347856125"
+    assert len(result.mid_boss.spawn_events) == 1
+    assert result.mid_boss.spawn_events[0].spawn_time_s == 600.0
+    assert result.mid_boss.spawn_events[0].max_health == 14950
+    assert len(result.mid_boss.kill_events) == 1
+    assert result.mid_boss.kill_events[0].team_claimed == 3
+
+
+@pytest.mark.asyncio
+async def test_execute_fails_loud_on_malformed_mid_boss_payload():
+    """If the parser returns a structurally-wrong mid_boss, the use case must surface it.
+
+    Regression guard: a missing boss_name_hash or a wrong-type field indicates a parser
+    regression we want to fail loudly on, not silently coerce to None.
+    """
+    from pydantic import ValidationError
+
+    mock_parser = AsyncMock()
+    mock_deadlock = AsyncMock()
+    mock_repo = AsyncMock()
+
+    mock_repo.get_match_data.return_value = None
+    mock_parser.check_demo_available.return_value = (True, "12345_67890.dem")
+    mock_parser.parse_demo.return_value = {
+        "match_duration_s": 0,
+        "match_start_time_s": 0,
+        "players": [],
+        "damage": [],
+        "positions": [],
+        "bosses": {"snapshots": [], "health_timeline": []},
+        "lane_creep_data": {"creeps": {}, "wave_meta": {}},
+        "mid_boss": {"spawn_events": []},  # missing required boss_name_hash
+    }
+
+    use_case = AnalyzeMatchUseCase(mock_parser, mock_deadlock, mock_repo)
+
+    with pytest.raises(ValidationError):
+        await use_case.execute(12345, schema_version=1, session=MagicMock())
+
+
+def test_boss_snapshot_boss_name_hash_round_trips_as_string():
+    """Regression guard for the JS precision-loss fix.
+
+    Pins the wire format: a parser response with `"boss_name_hash"` as a JSON
+    string must deserialize into a `BossSnapshot` whose field equals the
+    string-typed `BOSS_HASH_GUARDIAN` constant. Any future revert of the field
+    to `int` -- or of the constants to numeric literals -- breaks both
+    assertions. Without this guard the parser->backend->frontend chain can
+    silently regress to numeric transport, which IEEE 754 truncates above
+    2^53 and corrupts every real fxhash on the JS side.
+    """
+    from app.domain.boss import BossSnapshot
+    from app.services.lane_pressure_service import (
+        BOSS_HASH_GUARDIAN,
+        _BOSS_PRIORITY,
+    )
+
+    # Lock all five priority constants as strings; a numeric literal for any
+    # one of them silently downgrades dict lookups to the unknown-boss fallback
+    # (priority 99) and breaks objective sort order without raising.
+    assert len(_BOSS_PRIORITY) == 5
+    assert all(isinstance(k, str) for k in _BOSS_PRIORITY)
+
+    snapshot = BossSnapshot.model_validate({
+        "entity_index": 2527,
+        "custom_id": 21,
+        "boss_name_hash": "12946736302082733589",
+        "team": 2,
+        "lane": 1,
+        "x": -8128.0,
+        "y": -1856.0,
+        "z": 0.0,
+        "spawn_time_s": 0,
+        "max_health": 5500,
+        "life_state_on_create": 0,
+    })
+
+    assert isinstance(snapshot.boss_name_hash, str)
+    assert snapshot.boss_name_hash == BOSS_HASH_GUARDIAN
+    assert _BOSS_PRIORITY[snapshot.boss_name_hash] == 1

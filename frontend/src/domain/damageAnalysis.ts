@@ -6,7 +6,7 @@ export interface DamageTarget {
   percentage?: number;
   team?: number;
   heroImage?: string;
-  bossNameHash?: number;
+  bossNameHash?: string;
 }
 
 export interface PlayerDamageDistribution {

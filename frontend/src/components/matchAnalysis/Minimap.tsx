@@ -6,12 +6,14 @@ import RegionsMapping from './RegionsMapping';
 import PlayerPositions from './PlayerPositions';
 import CreepWaveLayer from './CreepWaveLayer';
 import SinnerLayer from './SinnerLayer';
+import MidBossLayer from './MidBossLayer';
 import { Region } from '../../domain/region';
 import { ScaledPlayerCoord, PlayerData } from '../../domain/player';
 import { ScaledBossSnapshot } from '../../domain/boss';
 import { ScaledSinnerSnapshot } from '../../domain/sinner';
 import { DestroyedObjective } from '../../domain/destroyedObjective';
 import { LaneCreepData } from '../../domain/creep';
+import { MidBossData } from '../../domain/midBoss';
 
 const MINIMAP_URL =
   'https://assets-bucket.deadlock-api.com/assets-api-res/images/maps/minimap.png';
@@ -32,6 +34,7 @@ const Minimap = ({
   laneCreepData,
   worldToMinimapPixels,
   scaledSinnerSnapshots,
+  midBoss,
 }: {
   currentSecond: number;
   setCurrentSecond: Dispatch<SetStateAction<number>>;
@@ -49,6 +52,7 @@ const Minimap = ({
   laneCreepData: LaneCreepData;
   worldToMinimapPixels: (x: number, y: number) => { left: number; top: number };
   scaledSinnerSnapshots: ScaledSinnerSnapshot[];
+  midBoss: MidBossData;
 }) => {
   const mapRef = useRef<HTMLImageElement>(null);
   const [activeObjectiveKey, setActiveObjectiveKey] = useState<string | null>(
@@ -113,6 +117,11 @@ const Minimap = ({
           <SinnerLayer
             scaledSinnerSnapshots={scaledSinnerSnapshots}
             currentSec={currentSecond}
+          />
+          <MidBossLayer
+            midBoss={midBoss}
+            currentSec={currentSecond}
+            worldToMinimapPixels={worldToMinimapPixels}
           />
         </div>
         <div className='border-top padding-0 flex w-full flex-col items-stretch gap-0 border-black/50 bg-gray-300'>
