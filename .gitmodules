@@ -1,3 +1,4 @@
 [submodule "private"]
 	path = private
 	url = git@github.com:eh-steban/dashjump-private.git
+	branch = main
