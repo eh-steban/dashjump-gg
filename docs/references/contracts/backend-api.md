@@ -104,7 +104,7 @@ All fields optional.
 
 Identical shape to parser output -- backend passes through without transformation.
 
-See `parser-output.md` -- BossData, BossSnapshot sections.
+See `parser-api.md` -- BossData, BossSnapshot sections.
 
 ---
 
@@ -112,7 +112,7 @@ See `parser-output.md` -- BossData, BossSnapshot sections.
 
 Identical shape to parser output -- backend passes through without transformation.
 
-See `parser-output.md` -- LaneCreepData, CreepSnapshot, WaveMeta sections.
+See `parser-api.md` -- LaneCreepData, CreepSnapshot, WaveMeta sections.
 
 ---
 
@@ -167,7 +167,7 @@ Sourced from Deadlock API (not from replay). Shape may evolve as API changes.
 
 Passed through from parser output unmodified.
 
-Identical shape to parser output -- see `parser-output.md` MidBossData section for full field specs.
+Identical shape to parser output -- see `parser-api.md` MidBossData section for full field specs.
 
 **Backend-specific notes:**
 - `mid_boss` is required on `TransformedMatchData` -- mid-boss always spawns at 10 minutes

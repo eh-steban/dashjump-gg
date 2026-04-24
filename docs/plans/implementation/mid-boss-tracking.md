@@ -114,8 +114,8 @@ Grant count per kill is 2-3, not always exactly 3 (depends on how many players c
 
 ### Contract Alignment (from spike cross-reference, 2026-04-11)
 
-- **`boss_name_hash` required**: Main-branch contract (`parser-output.md`) canonicalizes `boss_name_hash` as the stable type identifier for `BossSnapshot`. When adding mid-boss, emit `boss_name_hash = fxhash::hash_bytes(b"CNPC_MidBoss")`. `entity_killed_class = 8` is for message filtering only, NOT for contract emission.
-- **`max_health` mechanics table**: Add mid-boss row to `parser-output.md` max_health Mechanics table. Value is **per spawn cycle** -- read on each `CNPC_MidBoss` CREATE and stored on the corresponding `MidBossSpawnEvent`. Formula: `max_health = 13000 + 195 * match_minutes` where `match_minutes` is measured from match start. No match-global `max_health` on `mid_boss`.
+- **`boss_name_hash` required**: Main-branch contract (`parser-api.md`) canonicalizes `boss_name_hash` as the stable type identifier for `BossSnapshot`. When adding mid-boss, emit `boss_name_hash = fxhash::hash_bytes(b"CNPC_MidBoss")`. `entity_killed_class = 8` is for message filtering only, NOT for contract emission.
+- **`max_health` mechanics table**: Add mid-boss row to `parser-api.md` max_health Mechanics table. Value is **per spawn cycle** -- read on each `CNPC_MidBoss` CREATE and stored on the corresponding `MidBossSpawnEvent`. Formula: `max_health = 13000 + 195 * match_minutes` where `match_minutes` is measured from match start. No match-global `max_health` on `mid_boss`.
 - **Gap closure**: This plan closes `entity-types-reference.md` Gap 3 (mid-boss health not tracked) and partially closes Gap 5 (rejuv entities not subscribed).
 
 ---
@@ -130,16 +130,16 @@ Grant count per kill is 2-3, not always exactly 3 (depends on how many players c
 | Parser tracker | `parser/src/tracking/mid_boss_tracker.rs` | Create |
 | Parser tracker mod | `parser/src/tracking/mod.rs` | Add `mid_boss_tracker` module |
 | Parser integration | `parser/src/replay_parser.rs` | Subscribe messages, remove position tracking |
-| Parser output contract | `private/specs/contracts/parser-output.md` | Add `mid_boss` block |
+| Parser output contract | `private/specs/contracts/parser-api.md` | Add `mid_boss` block |
 | Backend domain | `backend/app/domain/mid_boss.py` | Create |
 | Backend domain model | `backend/app/domain/match_analysis.py` | Add `mid_boss` field |
 | Backend contract | `private/specs/contracts/backend-api.md` | Add `mid_boss` to response |
 
 ---
 
-## Phase 0 -- Contract (`rust-parser` owns parser-output.md; `backend-python` owns backend-api.md)
+## Phase 0 -- Contract (`rust-parser` owns parser-api.md; `backend-python` owns backend-api.md)
 
-### 0.1. Update `parser-output.md`
+### 0.1. Update `parser-api.md`
 
 Add a `mid_boss` top-level block to the parser output contract. The field sits alongside `bosses` and `lane_creep_data`. Use the structure below.
 
@@ -147,7 +147,7 @@ Add a `mid_boss` top-level block to the parser output contract. The field sits a
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `boss_name_hash` | string | yes | `fxhash::hash_bytes(b"CNPC_MidBoss")` as u64 string. Canonical type identifier per `parser-output.md` Boss Type Identification table. |
+| `boss_name_hash` | string | yes | `fxhash::hash_bytes(b"CNPC_MidBoss")` as u64 string. Canonical type identifier per `parser-api.md` Boss Type Identification table. |
 | `spawn_events` | MidBossSpawnEvent[] | yes | One per spawn cycle; empty if mid-boss never spawned. Per-cycle `max_health` lives on each entry (see table below) -- there is no match-global `max_health` on `mid_boss` because `m_iMaxHealth` scales with match time. |
 | `kill_events` | MidBossKillEvent[] | yes | One per kill; empty if mid-boss was never killed |
 | `rejuv_events` | RejuvStatusEvent[] | yes | One per individual rejuv grant; empty if no grants |
@@ -229,13 +229,13 @@ Add `mid_boss: MidBossData` (optional, may be null for old cached matches) to th
 
 > **Agent instructions:** Stop here. Before returning you MUST:
 > 1. List every field added across service boundaries
-> 2. Confirm `parser-output.md` and `backend-api.md` have been updated
+> 2. Confirm `parser-api.md` and `backend-api.md` have been updated
 > 3. Check off every item below with date and actual result
 > 4. Await user review before any Phase A/B work begins
 
 #### Results *(agent fills in)*
 
-- [x] `parser-output.md` updated with `mid_boss` block -- 2026-04-12. Added MidBossData top-level field and full sub-type specs: MidBossSpawnEvent, MidBossKillEvent, RejuvStatusEvent, FightWindow, HealthSample, MidBossPostMatch.
+- [x] `parser-api.md` updated with `mid_boss` block -- 2026-04-12. Added MidBossData top-level field and full sub-type specs: MidBossSpawnEvent, MidBossKillEvent, RejuvStatusEvent, FightWindow, HealthSample, MidBossPostMatch.
 - [x] `backend-api.md` updated with `mid_boss` field -- 2026-04-12. Added `mid_boss: MidBossData | None` to TransformedMatchData (optional for backward compat). Added MidBossData section noting passthrough + backend-populated `post_match`.
 - [x] All boundary-crossing fields listed in the table below
 
@@ -243,15 +243,15 @@ Add `mid_boss: MidBossData` (optional, may be null for old cached matches) to th
 
 | Field | Change | Spec file | Consuming service impact |
 |-------|--------|-----------|--------------------------|
-| `mid_boss` | added (new top-level key) | `parser-output.md` | Backend: add `mid_boss: MidBossData` to `ParsedMatchResponse` |
-| `mid_boss.boss_name_hash` | added | `parser-output.md` | Backend: passthrough |
-| `mid_boss.spawn_events` | added (MidBossSpawnEvent[]) | `parser-output.md` | Backend: passthrough |
-| `mid_boss.spawn_events[].max_health` | added (per-cycle `m_iMaxHealth`, revised 2026-04-16) | `parser-output.md` | Backend: passthrough; Frontend: `MidBossHealthBar` reads from active spawn event, not match-global. Legacy top-level `mid_boss.max_health` removed in same revision. |
-| `mid_boss.kill_events` | added (MidBossKillEvent[]) | `parser-output.md` | Backend: passthrough |
-| `mid_boss.kill_events[].team_claimed` | added (derived field) | `parser-output.md` | Backend: passthrough; Frontend: compare to post_match |
-| `mid_boss.rejuv_events` | added (RejuvStatusEvent[]) | `parser-output.md` | Backend: passthrough |
-| `mid_boss.fight_windows` | added (FightWindow[]) | `parser-output.md` | Backend: passthrough |
-| `mid_boss.post_match` | added (MidBossPostMatch[]) | `parser-output.md`, `backend-api.md` | Parser populates from collected kill events in `finalize()`; backend passes through unchanged |
+| `mid_boss` | added (new top-level key) | `parser-api.md` | Backend: add `mid_boss: MidBossData` to `ParsedMatchResponse` |
+| `mid_boss.boss_name_hash` | added | `parser-api.md` | Backend: passthrough |
+| `mid_boss.spawn_events` | added (MidBossSpawnEvent[]) | `parser-api.md` | Backend: passthrough |
+| `mid_boss.spawn_events[].max_health` | added (per-cycle `m_iMaxHealth`, revised 2026-04-16) | `parser-api.md` | Backend: passthrough; Frontend: `MidBossHealthBar` reads from active spawn event, not match-global. Legacy top-level `mid_boss.max_health` removed in same revision. |
+| `mid_boss.kill_events` | added (MidBossKillEvent[]) | `parser-api.md` | Backend: passthrough |
+| `mid_boss.kill_events[].team_claimed` | added (derived field) | `parser-api.md` | Backend: passthrough; Frontend: compare to post_match |
+| `mid_boss.rejuv_events` | added (RejuvStatusEvent[]) | `parser-api.md` | Backend: passthrough |
+| `mid_boss.fight_windows` | added (FightWindow[]) | `parser-api.md` | Backend: passthrough |
+| `mid_boss.post_match` | added (MidBossPostMatch[]) | `parser-api.md`, `backend-api.md` | Parser populates from collected kill events in `finalize()`; backend passes through unchanged |
 | `mid_boss` | added (new API response field, optional) | `backend-api.md` | Frontend: domain types + console.log post_match |
 
 #### Deferred items
@@ -810,7 +810,7 @@ interface MidBossPostMatch {
 - [x] Icon disappears at exact kill time when scrubbing -- 2026-04-15. `findActiveCycle` uses `currentSecond >= kill.matchtime_s` as the exclusive upper bound; bar + icon both release on the first tick past kill time.
 - [x] Health bar tracks samples correctly with step interpolation -- 2026-04-15 (original match-global denominator), updated to per-cycle denominator per 2026-04-16 correction. `currentMidBossHealth` walks `fight_windows[*].health_samples` with step interpolation (no linear smoothing), shows the active cycle's `spawn_events[].max_health` before the first window, and `health_at_end` in gap periods. Match `68182475` cycle 2 window 1740.78 -- 1749.77 with 320 samples drains 18655 -> 0 visibly as scrubber passes the window. Before 2026-04-16 the bar used match-global `mid_boss.max_health` (the first cycle's value) as the denominator for every cycle, producing up to -24% error on cycle 3 on long matches -- see Phase A Deferred items for the correction.
 - [x] Rejuv claims show correct team and count -- 2026-04-15. `RecentClaim` reads per-team grant counts from `rejuvClaimsForCompletedKill` (filters `event_type === 6` inside `kill.matchtime_s + 10s`). Match `68182475`: kill 1 shows "Sapphire: 3", kill 2 shows "Sapphire: 3". The contested-steal case is covered by unit test `selectors.test.ts` (`rejuvClaimsForCompletedKill` with mixed-team grants), pending a real replay with a 2-1 split to eyeball.
-- [x] Frontend types match backend API contract -- 2026-04-15. `frontend/src/domain/midBoss.ts` mirrors `parser-output.md` after F1 (`team_killed`, `rejuvs_by_team`, `MidBossPostMatch` without `team_claimed`). All 118 frontend tests pass. Needs a follow-up patch to land the 2026-04-16 per-cycle shape: drop top-level `max_health`, add `max_health` to `MidBossSpawnEvent`, update consumer selectors to resolve `max_health` from the active spawn event.
+- [x] Frontend types match backend API contract -- 2026-04-15. `frontend/src/domain/midBoss.ts` mirrors `parser-api.md` after F1 (`team_killed`, `rejuvs_by_team`, `MidBossPostMatch` without `team_claimed`). All 118 frontend tests pass. Needs a follow-up patch to land the 2026-04-16 per-cycle shape: drop top-level `max_health`, add `max_health` to `MidBossSpawnEvent`, update consumer selectors to resolve `max_health` from the active spawn event.
 - [x] Spawn-but-no-kill UI path covered -- `frontend/tests/services/midBoss/selectors.test.ts:119` ("stays alive forever when a spawn has no matching kill (match-end case)") exercises the case where the match ends with mid-boss still alive. Mid-boss always spawns (10-min timer), so the interesting branch is "spawned, not killed", not "no block at all".
 
 #### Integer-tick boundary fix (2026-04-15)
@@ -829,7 +829,7 @@ Await user review and commit approval.
 
 | Phase | Command | Key checks | Status |
 |-------|---------|------------|--------|
-| 0 | Contract spec review | `parser-output.md` and `backend-api.md` updated, all fields documented | ✅ 2026-04-12 (F1 updates to spec 2026-04-15) |
+| 0 | Contract spec review | `parser-api.md` and `backend-api.md` updated, all fields documented | ✅ 2026-04-12 (F1 updates to spec 2026-04-15) |
 | A | `cargo test` | All tests pass, no regressions | ✅ 2026-04-15 -- 78/78 |
 | A | Parse replay with mid-boss kill | `mid_boss` block present, fight_windows non-empty, last window health_at_end=0, team_claimed derived | ✅ 2026-04-15 -- match `68182475`: 2 spawns, 2 kills, 2 fight windows, `health_at_end=0`, strict-majority `team_claimed` matches `rejuvs_by_team` |
 | A | Spawn-but-no-kill unit test | `finalize()` on a tracker with one spawn + no damage + no kill emits one `spawn_events` entry and empty `kill_events`/`fight_windows`/`rejuv_events` | ✅ 2026-04-16 -- `finalize_after_spawn_without_kill_emits_spawn_only_output` in parser tests |
@@ -857,14 +857,14 @@ These are tracked here so they don't get lost. Each is a candidate for a separat
 
 ### F1. Mid-boss kill attribution (Bugs 1+2) -- ✅ COMPLETE 2026-04-15
 
-**Landed:** contract updated in `parser-output.md` + new `references.md`; parser renames `team` -> `team_killed`, sources from `RejuvStatus.killing_team`, replaces `gametime`-anchored window with `last_damage_time_s + 30s`, derives `team_claimed` via strict majority, emits `rejuvs_by_team` with both team keys always present; `MidBossPostMatch` drops `team_claimed` and adds `rejuvs_by_team`; `ECitadelLobbyTeam` (2/3) used at the boundary. Backend Pydantic domain and tests updated. Frontend `domain/midBoss.ts` + consumers (`MidBossHealthBar`, `MidBossLayer`, selectors, selectors tests, component tests) updated. Migration re-run (`alembic downgrade base` -> `upgrade head`) to clear stale cache rows. Backend API on match `68182475` verified end-to-end with curl. All three test suites clean post-F1 (78/68/118). Dev-only `post_match` console.log removed from `MatchAnalysis.tsx`.
+**Landed:** contract updated in `parser-api.md` + new `references.md`; parser renames `team` -> `team_killed`, sources from `RejuvStatus.killing_team`, replaces `gametime`-anchored window with `last_damage_time_s + 30s`, derives `team_claimed` via strict majority, emits `rejuvs_by_team` with both team keys always present; `MidBossPostMatch` drops `team_claimed` and adds `rejuvs_by_team`; `ECitadelLobbyTeam` (2/3) used at the boundary. Backend Pydantic domain and tests updated. Frontend `domain/midBoss.ts` + consumers (`MidBossHealthBar`, `MidBossLayer`, selectors, selectors tests, component tests) updated. Migration re-run (`alembic downgrade base` -> `upgrade head`) to clear stale cache rows. Backend API on match `68182475` verified end-to-end with curl. All three test suites clean post-F1 (78/68/118). Dev-only `post_match` console.log removed from `MatchAnalysis.tsx`.
 
 **Original analysis retained below for context.**
 
 
 `MidBossKillEvent.team` and `team_claimed` are wrong on every cycle in replay `55423930`. Root causes and the chosen approach:
 
-1. **`team` is the objective's team, not the killer's.** `BossKilled.objective_team` is always `4` (neutral) for `CNPC_MidBoss`. Stop sourcing `team` from this field. Source it from `RejuvStatus.killing_team` (consistent across all grants for a kill) and rename the field to `team_killed` for clarity. Update `parser-output.md` accordingly.
+1. **`team` is the objective's team, not the killer's.** `BossKilled.objective_team` is always `4` (neutral) for `CNPC_MidBoss`. Stop sourcing `team` from this field. Source it from `RejuvStatus.killing_team` (consistent across all grants for a kill) and rename the field to `team_killed` for clarity. Update `parser-api.md` accordingly.
 
 2. **`BossKilled.gametime` lags actual entity death by 7-18 s.** The `[kill_time, kill_time + 30s]` rejuv attribution window misses every grant in the observed replay. Fix: replace the `gametime`-anchored window with the closed fight window's `last_damage_time_s` as the kill anchor (more accurate -- last damage on cycle 1 was `1994.6` and the first grant fired at `2002.3`, well within a `last_damage_time_s + 30s` forward window). Drop the `# TODO: verify` from `replay_parser.rs:819` once this lands.
 
@@ -872,7 +872,7 @@ These are tracked here so they don't get lost. Each is a candidate for a separat
 
    - **Emit `rejuvs_by_team: {2: 2, 3: 1}` on each `MidBossKillEvent`** (raw counts of `event_type == 6` grants per `user_team`, attributed to a kill via the `last_damage_time_s + 30s` window). Always include both teams as keys, even when zero, so downstream code never has to guard for missing keys.
    - **Derive `team_claimed` via strict majority (`>= 2` of 3 grants).** With 3 grants per kill, one team always reaches the threshold -- `team_claimed` is never null.
-   - **Keep Valve's blob untouched in `match_metadata.match_info.mid_boss`.** It already flows through unmodified -- the divergence lives entirely in the parser-derived `mid_boss.kill_events`/`post_match`. Document in `parser-output.md`: "`team_claimed` uses our majority-of-grants derivation, not Valve's `team_claimed`. The Valve value is preserved verbatim in `match_metadata.match_info.mid_boss[].team_claimed` for users who need to compare against the in-game UI."
+   - **Keep Valve's blob untouched in `match_metadata.match_info.mid_boss`.** It already flows through unmodified -- the divergence lives entirely in the parser-derived `mid_boss.kill_events`/`post_match`. Document in `parser-api.md`: "`team_claimed` uses our majority-of-grants derivation, not Valve's `team_claimed`. The Valve value is preserved verbatim in `match_metadata.match_info.mid_boss[].team_claimed` for users who need to compare against the in-game UI."
    - **Remove `team_claimed` from `MidBossPostMatch`** -- the parser-side `post_match` should be a pure summary of our derivation (`team_killed`, `destroyed_time_s`, `rejuvs_by_team`), and Valve's `post_match` stays the canonical source for the Valve number.
 
 4. **Final emitted enum should be `ECitadelLobbyTeam` (2/3) per project convention.** Valve uses `ECitadelTeam` (0/1). Document the mapping and apply it once at the boundary so callers don't have to remember which is which.

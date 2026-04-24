@@ -15,10 +15,10 @@ Pre-research (two parallel agents + `entity-types-runtime-census.md:134`) confir
 
 ### Contract impact
 
-Any Decision-Tree branch except `Stop` changes the parser → backend contract (`private/specs/contracts/parser-output.md`). Call-outs for the implementation plan that graduates from this discovery:
+Any Decision-Tree branch except `Stop` changes the parser → backend contract (`private/specs/contracts/parser-api.md`). Call-outs for the implementation plan that graduates from this discovery:
 
 - **Replace branch:** `lane_creep_data.creeps` is keyed today by `CNPC_Trooper` entity_index. If we switch to the minimap entity, the implementation plan must either (a) preserve those keys by joining through the `CHandle<CNPC_Trooper>` field (Q5) or (b) define a new key scheme (e.g. `minimap_slot_id`) and update the contract + downstream backend + frontend consumers.
-- **Augment branch:** any FOW / per-team visibility fields require a new contract type (suggested name: `TrooperFOWData` or a `fow_visibility` sub-field on `LaneCreepData`) specified in `parser-output.md` before implementation begins.
+- **Augment branch:** any FOW / per-team visibility fields require a new contract type (suggested name: `TrooperFOWData` or a `fow_visibility` sub-field on `LaneCreepData`) specified in `parser-api.md` before implementation begins.
 - **Cage-phase overlap:** if the minimap entity covers cage/zipline troopers (Q8), the `is_cage` field on `CreepSnapshot` may be replaceable or redundant -- the implementation plan needs to decide.
 
 None of this needs to be resolved in this discovery -- these are headers the implementation plan's contract-update section must fill in.

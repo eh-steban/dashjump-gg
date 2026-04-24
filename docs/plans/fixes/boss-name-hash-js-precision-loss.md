@@ -8,7 +8,7 @@
 
 **Discovered via:** spike `private/plans/spikes/boss-serializer-hash-drift.md` (2026-04-14), while reverse-engineering the frontend `BOSS_NAME_HASH_MAP` to identify the origin of the fake `11298616958347856125` hash the spike's Context referenced.
 **Related:** `private/plans/spikes/boss-serializer-hash-drift.md`, `private/plans/fixes/midboss-damage-dispatch-panic.md` (sibling bug from the same spike)
-**Overall confidence:** `confirmed` -- three converging lines of evidence: (1) IEEE 754 doubles cannot losslessly hold any integer above `2^53`, and every real fxhash in the probe output (`private/engineering/tools/class_symbols_55423930.txt`) is an 18-20 digit u64, (2) the in-codebase precedent `parser/src/domain/mid_boss.rs:8` already uses string-on-wire for the same kind of hash and works correctly through the same parser->backend->frontend path, (3) the contract spec (`parser-output.md:127-133`) already carries the correct decimal values, so the fix is mechanical alignment rather than fresh discovery. No new probe runs required.
+**Overall confidence:** `confirmed` -- three converging lines of evidence: (1) IEEE 754 doubles cannot losslessly hold any integer above `2^53`, and every real fxhash in the probe output (`private/engineering/tools/class_symbols_55423930.txt`) is an 18-20 digit u64, (2) the in-codebase precedent `parser/src/domain/mid_boss.rs:8` already uses string-on-wire for the same kind of hash and works correctly through the same parser->backend->frontend path, (3) the contract spec (`parser-api.md:127-133`) already carries the correct decimal values, so the fix is mechanical alignment rather than fresh discovery. No new probe runs required.
 
 ---
 
@@ -43,7 +43,7 @@ Two overlapping defects:
 
 **(1) Wire format.** `parser/src/domain/boss.rs:11` declares `pub boss_name_hash: u64` and `#[derive(Serialize)]`, so serde emits the hash as a JSON number. `backend/app/domain/boss.py:7` holds it as `int` (Python handles arbitrary precision, no corruption), and then FastAPI's `JSONResponse` re-emits it as a JSON number. When the frontend calls `JSON.parse` on the response, any integer above `Number.MAX_SAFE_INTEGER` (`2^53 - 1 = 9007199254740991`) is silently coerced to the nearest representable double. Every real fxhash exceeds that ceiling, so every `boss_name_hash` arrives in TypeScript already corrupted -- `BossSnapshot.boss_name_hash` is typed `number` at `frontend/src/domain/boss.ts:4` and the lossy double is what populates it.
 
-**(2) Stale map.** Orthogonal to (1), the `BOSS_NAME_HASH_MAP` at `frontend/src/domain/boss.ts:42-48` was populated from a previous-generation parser build (or hand-typed from an older haste fork whose fxhash output differed). The current values do not match any live u64 in the probe output. Even if we fixed the wire format tomorrow, the map would still need to be rewritten with the true decimal strings. The contract spec at `private/specs/contracts/parser-output.md:127-133` already documents the correct u64 values -- the frontend just never resynced.
+**(2) Stale map.** Orthogonal to (1), the `BOSS_NAME_HASH_MAP` at `frontend/src/domain/boss.ts:42-48` was populated from a previous-generation parser build (or hand-typed from an older haste fork whose fxhash output differed). The current values do not match any live u64 in the probe output. Even if we fixed the wire format tomorrow, the map would still need to be rewritten with the true decimal strings. The contract spec at `private/specs/contracts/parser-api.md:127-133` already documents the correct u64 values -- the frontend just never resynced.
 
 Bug (1) alone would be sufficient to break the UI; bug (2) ensures that even after a precision fix the map lookups would still miss until the keys are replaced.
 
@@ -63,11 +63,11 @@ Three-replay probe evidence from the spike proves every real u64 hash is distinc
 
 **Contract change:** yes
 
-The parser output contract at `private/specs/contracts/parser-output.md:107-111` currently types `boss_name_hash` as `int`. It must change to `string` for consistency with the mid-boss hash (`parser-output.md:233`) and to match the new wire format. The "Boss Type Identification" table at `parser-output.md:127-133` already carries the correct decimal values and needs no value changes -- only the header column label `(u64)` should be updated to `(u64 as string)` to clarify the wire type.
+The parser output contract at `private/specs/contracts/parser-api.md:107-111` currently types `boss_name_hash` as `int`. It must change to `string` for consistency with the mid-boss hash (`parser-api.md:233`) and to match the new wire format. The "Boss Type Identification" table at `parser-api.md:127-133` already carries the correct decimal values and needs no value changes -- only the header column label `(u64)` should be updated to `(u64 as string)` to clarify the wire type.
 
 ### Contract pre-check *(must complete before Phase 0 ships)*
 
-Before editing the contract spec or any code, open `private/specs/contracts/parser-output.md:127-133` and confirm **all five** of these decimal values are present in the Boss Type Identification table, byte-for-byte:
+Before editing the contract spec or any code, open `private/specs/contracts/parser-api.md:127-133` and confirm **all five** of these decimal values are present in the Boss Type Identification table, byte-for-byte:
 
 | Class | Required decimal value |
 |---|---|
@@ -79,8 +79,8 @@ Before editing the contract spec or any code, open `private/specs/contracts/pars
 
 If any value is missing, mismatched, or carries an old truncated form, **stop** and update the spec to the values above (verified from `private/engineering/tools/class_symbols_55423930.txt`) before continuing. The downstream backend constants and frontend map keys all derive from this table -- a stale spec row guarantees the fix re-introduces the same bug under a different mask.
 
-- [ ] Contract pre-check completed (5/5 values verified in `parser-output.md:127-133`)
-- [ ] `private/specs/contracts/parser-output.md` -- change `boss_name_hash` row in the BossSnapshot table from `int` to `string`; update the Boss Type Identification table header to say the values are transported as decimal strings
+- [ ] Contract pre-check completed (5/5 values verified in `parser-api.md:127-133`)
+- [ ] `private/specs/contracts/parser-api.md` -- change `boss_name_hash` row in the BossSnapshot table from `int` to `string`; update the Boss Type Identification table header to say the values are transported as decimal strings
 
 ---
 
@@ -155,7 +155,7 @@ Align `BossSnapshot.boss_name_hash` with the existing mid-boss precedent: parser
 - [ ] Devtools network tab shows `boss_name_hash` fields as quoted JSON strings in the `/match/analysis/<id>` response
 
 *Process:*
-- [ ] Contract spec `private/specs/contracts/parser-output.md` updated to type `boss_name_hash` as `string`
+- [ ] Contract spec `private/specs/contracts/parser-api.md` updated to type `boss_name_hash` as `string`
 - [ ] Project Definition of Done met: tests, observability, conventions, security
 
 ---
@@ -224,7 +224,7 @@ This bug is the second case in recent history where a 64-bit identifier traveled
 ## Execution Order
 
 1. Fill in Context, Symptom, Root Cause, Scope, and Fix *(already done in this file)*
-2. **Phase 0 -- Contract spec.** Update `private/specs/contracts/parser-output.md` (`int` -> `string`, clarify Boss Type Identification table header). Pause for user review before touching code.
+2. **Phase 0 -- Contract spec.** Update `private/specs/contracts/parser-api.md` (`int` -> `string`, clarify Boss Type Identification table header). Pause for user review before touching code.
 3. **Phase A -- Parser.** Change `domain/boss.rs`, `tracking/boss_tracker.rs`, fixture tests; add regression test. Run `cargo test` and `cargo clippy`. User review -- commit.
 4. **Phase B -- Backend.** Change `domain/boss.py`, `services/lane_pressure_service.py` constants, update all fixture files. Add Pydantic regression test. Run `pytest`, `ruff`, `mypy`. User review -- commit.
 5. **Phase C -- Frontend.** Change `domain/boss.ts` interface and `BOSS_NAME_HASH_MAP`, update stale fixture in `matchAnalysis.ts`, delete the TODO comment. Add display-name regression test. Run `npm test` and `npm run tsc`. User review -- commit.

@@ -74,7 +74,7 @@ Feature is done when ALL of the following are true:
 
 | Layer | File | Change |
 |-------|------|--------|
-| Parser contract | `private/specs/contracts/parser-output.md` | Modify |
+| Parser contract | `private/specs/contracts/parser-api.md` | Modify |
 | Parser domain | `parser/src/domain/sinner.rs` | Create |
 | Parser domain registry | `parser/src/domain/mod.rs` | Modify |
 | Parser tracker | `parser/src/tracking/sinner_tracker.rs` | Create |
@@ -89,7 +89,7 @@ Feature is done when ALL of the following are true:
 
 This phase blocks all others. No Phase A or Phase B work begins until the contract checkpoint is signed off.
 
-### 0.1. Update `parser-output.md`
+### 0.1. Update `parser-api.md`
 
 Add a `sinners` row to the Top-Level Response table and add a new `SinnerSnapshot` section beneath the `BossData` section. The section must include:
 
@@ -124,13 +124,13 @@ Add a `sinners` row to the Top-Level Response table and add a new `SinnerSnapsho
 
 > **Agent instructions:** Stop here. Before returning you MUST:
 > 1. List every field added across service boundaries
-> 2. Confirm `private/specs/contracts/parser-output.md` has been updated
+> 2. Confirm `private/specs/contracts/parser-api.md` has been updated
 > 3. Check off every item below with date and actual result
 > 4. Await user review before any Phase A or Phase B work begins
 
 #### Results *(agent fills in)*
 
-- [x] `private/specs/contracts/parser-output.md` updated -- `sinners` top-level field and `SinnerSnapshot` table added (2026-04-07)
+- [x] `private/specs/contracts/parser-api.md` updated -- `sinners` top-level field and `SinnerSnapshot` table added (2026-04-07)
 - [x] All boundary-crossing fields listed in the field change log below (2026-04-07)
 - [x] Phase B target noted: `ParsedMatchResponse` and `TransformedMatchData` need `sinners: list[SinnerSnapshot]` (2026-04-07)
 
@@ -138,17 +138,17 @@ Add a `sinners` row to the Top-Level Response table and add a new `SinnerSnapsho
 
 | Field | Change | Spec file | Consuming service impact |
 |-------|--------|-----------|--------------------------|
-| `sinners` | added (SinnerSnapshot[]) | `parser-output.md` | `ParsedMatchResponse` needs `sinners: list[SinnerSnapshot]`; `TransformedMatchData` same |
-| `sinners[].entity_index` | added (int, required) | `parser-output.md` | new field |
-| `sinners[].x` | added (float, required) | `parser-output.md` | new field |
-| `sinners[].y` | added (float, required) | `parser-output.md` | new field |
-| `sinners[].z` | added (float, required) | `parser-output.md` | new field |
-| `sinners[].spawn_time_s` | added (int, required) | `parser-output.md` | new field |
-| `sinners[].max_health` | added (int, required) | `parser-output.md` | new field |
-| `sinners[].death_time_s` | added (int, optional) | `parser-output.md` | new field |
-| `sinners[].time_alive_s` | added (int, optional) | `parser-output.md` | new field |
-| `sinners[].killer_player_slot` | added (int, optional) | `parser-output.md` | new field |
-| `sinners[].retaliation_damage` | added (Record\<string,int\>, required) | `parser-output.md` | Python: `dict[str, int]`; keys are lobby slot as string |
+| `sinners` | added (SinnerSnapshot[]) | `parser-api.md` | `ParsedMatchResponse` needs `sinners: list[SinnerSnapshot]`; `TransformedMatchData` same |
+| `sinners[].entity_index` | added (int, required) | `parser-api.md` | new field |
+| `sinners[].x` | added (float, required) | `parser-api.md` | new field |
+| `sinners[].y` | added (float, required) | `parser-api.md` | new field |
+| `sinners[].z` | added (float, required) | `parser-api.md` | new field |
+| `sinners[].spawn_time_s` | added (int, required) | `parser-api.md` | new field |
+| `sinners[].max_health` | added (int, required) | `parser-api.md` | new field |
+| `sinners[].death_time_s` | added (int, optional) | `parser-api.md` | new field |
+| `sinners[].time_alive_s` | added (int, optional) | `parser-api.md` | new field |
+| `sinners[].killer_player_slot` | added (int, optional) | `parser-api.md` | new field |
+| `sinners[].retaliation_damage` | added (Record\<string,int\>, required) | `parser-api.md` | Python: `dict[str, int]`; keys are lobby slot as string |
 
 #### Deferred items
 None.
@@ -836,7 +836,7 @@ After Phases A-C landed, a coach-facing gap became clear: the original `retaliat
   - `SinnerDamageKind { Dealt, Retaliated }` -- serde-tagged snake_case enum.
   - `SinnerDamageEvent { time_s: u32, player_slot: u32, kind: SinnerDamageKind, damage: i32 }`.
 - **New field on `SinnerSnapshot`**: `damage_events: Vec<SinnerDamageEvent>`. Ordered, per-life, captures every damage exchange against the sinner (dealt and retaliated, with timestamps). ~5-10 events per life × ~40 lives per match = ~200-400 events per match -- trivial storage.
-- **`retaliation_damage` kept and still populated** for backwards compatibility with the current `PlayerCards.tsx`, which will be refactored within the next 1-2 weeks. Marked DEPRECATED in the Rust docstring and in `parser-output.md`. Will be removed in a follow-up parser commit once the frontend migrates to `damage_events`.
+- **`retaliation_damage` kept and still populated** for backwards compatibility with the current `PlayerCards.tsx`, which will be refactored within the next 1-2 weeks. Marked DEPRECATED in the Rust docstring and in `parser-api.md`. Will be removed in a follow-up parser commit once the frontend migrates to `damage_events`.
 - **Tracker changes in `parser/src/tracking/sinner_tracker.rs`**:
   - `record_retaliation` gained a `time_s: u32` parameter and now appends a `Retaliated` event alongside the legacy HashMap accumulation.
   - New `record_dealt_event(sinner_idx, attacker_slot, damage, time_s)` method appends a `Dealt` event. No HashMap on the dealt side -- the event log is the sole source of truth for that direction.
@@ -885,7 +885,7 @@ Parser-only. Backend `ParsedMatchResponse` will pass the field through by defaul
 
 | Phase | Command | Key checks | Status |
 |-------|---------|------------|--------|
-| 0 | Contract spec review | `sinners` field + `SinnerSnapshot` table in `parser-output.md`; backend impact noted | DONE |
+| 0 | Contract spec review | `sinners` field + `SinnerSnapshot` table in `parser-api.md`; backend impact noted | DONE |
 | A | `cargo test` | All tests pass, no regressions | PASS -- 47/47 |
 | A | Parse `68182475_4609034.dem` | 40 snapshots, 34 with death data, 6 null; no sinners in positions array | PASS |
 | B | `pytest` | All tests pass, no regressions | PASS -- 50/50 |

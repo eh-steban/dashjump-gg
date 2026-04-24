@@ -114,12 +114,12 @@ Parser produces (compressed before sending to backend):
 
 ## Contracts
 
-The parser output contract is defined in `private/specs/contracts/parser-output.md`.
+The parser output contract is defined in `private/specs/contracts/parser-api.md`.
 
 **Before serializing a new field or changing a type in `parser/src/domain/`:**
-1. Update `parser-output.md` first (add field, type, required/optional, notes)
+1. Update `parser-api.md` first (add field, type, required/optional, notes)
 2. Then implement in Rust
 3. The backend's `ParsedMatchResponse` must be updated to match before the shard is complete
 
-Do not add fields to serde structs that are not in `parser-output.md`. Field names in serialized
+Do not add fields to serde structs that are not in `parser-api.md`. Field names in serialized
 output are part of the contract -- rename only with a corresponding spec update.

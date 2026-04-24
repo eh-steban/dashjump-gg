@@ -367,7 +367,7 @@ Default to string-on-wire for any u64 ID at a JSON service boundary that has a J
 - Adding a new `*_hash` or `*_id` field to a parser struct that flows to the frontend
 - Reviewing a contract spec change that introduces a new u64
 - Any `Number.MAX_SAFE_INTEGER` discussion
-- Auditing the parser-output / backend-api contracts for similar fields
+- Auditing the parser-api / backend-api contracts for similar fields
 
 **Prevention:**
 - Frontend types for any cross-service ID must be `string`, never `number`, unless the bound is provably under 2^53

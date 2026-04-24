@@ -14,7 +14,7 @@ A contract is the agreed JSON shape at a service boundary:
 
 | Contract | Boundary | Spec file |
 |----------|----------|-----------|
-| Parser output | parser -> backend | `private/specs/contracts/parser-output.md` |
+| Parser output | parser -> backend | `private/specs/contracts/parser-api.md` |
 | Backend API | backend -> frontend | `private/specs/contracts/backend-api.md` |
 
 These files are the single source of truth. When code and spec diverge, update the spec first,
@@ -24,7 +24,7 @@ then update the consuming service.
 
 | Contract | Owner (updates spec) | Consumer (reads spec) |
 |----------|---------------------|----------------------|
-| `parser-output.md` | `rust-parser` agent | `backend-python` agent |
+| `parser-api.md` | `rust-parser` agent | `backend-python` agent |
 | `backend-api.md` | `backend-python` agent | `frontend-react` agent |
 
 ## Contract-First Rule
@@ -42,12 +42,12 @@ This applies whenever:
 When completing a shard that touches a contract:
 
 **Parser agent:**
-- [ ] Does `ParsedMatchResponse` in backend still compile against `parser-output.md`?
-- [ ] Are all new fields documented in `parser-output.md` with type, required/optional, and notes?
+- [ ] Does `ParsedMatchResponse` in backend still compile against `parser-api.md`?
+- [ ] Are all new fields documented in `parser-api.md` with type, required/optional, and notes?
 
 **Backend agent:**
 - [ ] Does `TransformedMatchData` still match `backend-api.md`?
-- [ ] Does `ParsedMatchResponse` still match `parser-output.md`?
+- [ ] Does `ParsedMatchResponse` still match `parser-api.md`?
 - [ ] Are `test_match_api.py` schema tests still passing?
 
 **Frontend agent:**

@@ -115,7 +115,7 @@ The implementation plan can proceed with the confirmed data sources. The unresol
 
 **Step 1:** Add `should_track_snapshot()` to `replay_parser.rs`, remove sinner from `should_track_position()`
 
-**Step 2:** Update `private/specs/contracts/parser-output.md` with revised `SinnerSnapshot` (no killer fields)
+**Step 2:** Update `private/specs/contracts/parser-api.md` with revised `SinnerSnapshot` (no killer fields)
 
 **Step 3:** `parser/src/domain/sinner.rs` -- implement revised struct
 

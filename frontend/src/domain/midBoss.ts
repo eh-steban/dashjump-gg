@@ -1,5 +1,5 @@
 // Mid-boss types mirror the backend `MidBossData` contract documented in
-// `private/specs/contracts/backend-api.md` and `parser-output.md`. Field names
+// `private/specs/contracts/backend-api.md` and `parser-api.md`. Field names
 // are snake_case because the backend ships JSON as-is.
 
 export interface MidBossSpawnEvent {

@@ -31,7 +31,7 @@ Low-level technical ground truth for the Rust parser service. These are the docs
 | `entity-fields-supplemental.md` | Probe-validated field notes beyond what SendTables exposes directly |
 | `deadlock-api-haste-reference.md` | API surface of the `deadlock-api/haste` Rust crate used for replay decoding |
 | `contracts/backend-api.md` | Backend HTTP response contract (`GET /match/analysis/{match_id}`) -- source of truth for frontend domain types |
-| `contracts/parser-output.md` | Parser output JSON schema -- source of truth for backend deserialization. Long-form field explanations live in `contracts/references.md` |
+| `contracts/parser-api.md` | Parser output JSON schema -- source of truth for backend deserialization. Long-form field explanations live in `contracts/references.md` |
 
 ### `plans/`
 

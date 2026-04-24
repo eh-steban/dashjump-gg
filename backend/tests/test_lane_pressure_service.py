@@ -38,7 +38,7 @@ def _make_boss(
     y: float,
 ) -> BossSnapshot:
     """Build a BossSnapshot mock. `hash_` is the boss_name_hash decimal string
-    (u64 transported as string -- see parser-output.md). Use one of the
+    (u64 transported as string -- see parser-api.md). Use one of the
     BOSS_HASH_* constants from lane_pressure_service to identify the boss
     type. custom_id is a convenience field that the service no longer
     consults, so it is left at 0.

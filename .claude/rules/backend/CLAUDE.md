@@ -77,10 +77,10 @@ Two contracts involve the backend:
 
 | Contract | Spec file | Role |
 |----------|-----------|------|
-| Parser output | `private/specs/contracts/parser-output.md` | Consumer -- `ParsedMatchResponse` must match |
+| Parser output | `private/specs/contracts/parser-api.md` | Consumer -- `ParsedMatchResponse` must match |
 | Backend API | `private/specs/contracts/backend-api.md` | Owner -- `TransformedMatchData` defines the spec |
 
-**When changing `ParsedMatchResponse`:** verify it still matches `parser-output.md` -- the parser
+**When changing `ParsedMatchResponse`:** verify it still matches `parser-api.md` -- the parser
 owns that spec, so coordinate with `rust-parser` if a parser-side change is needed.
 
 **When changing `TransformedMatchData` or any type reachable from `MatchAnalysis`:** update

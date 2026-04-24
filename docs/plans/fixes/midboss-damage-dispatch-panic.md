@@ -64,7 +64,7 @@ So the panicking value is neither drift nor corruption -- it is the mid-boss its
 
 **Contract change:** no
 
-Parser JSON output schema is unchanged -- mid-boss damage already surfaces as `damage` map entries keyed by the attacker/victim id pair; this fix only keeps the parser from panicking before those entries are produced. `parser-output.md`, `backend/app/domain/parsed_match.py`, `frontend/src/domain/matchAnalysis.ts` need no updates.
+Parser JSON output schema is unchanged -- mid-boss damage already surfaces as `damage` map entries keyed by the attacker/victim id pair; this fix only keeps the parser from panicking before those entries are produced. `parser-api.md`, `backend/app/domain/parsed_match.py`, `frontend/src/domain/matchAnalysis.ts` need no updates.
 
 ---
 

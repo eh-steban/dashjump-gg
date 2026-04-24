@@ -1,6 +1,6 @@
 # Contract References
 
-Long-form explanations for fields defined in `parser-output.md` and `backend-api.md`. Tables in those files link here when a note grows past a single sentence.
+Long-form explanations for fields defined in `parser-api.md` and `backend-api.md`. Tables in those files link here when a note grows past a single sentence.
 
 ## MidBossKillEvent: team_killed source
 

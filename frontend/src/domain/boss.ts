@@ -33,7 +33,7 @@ export interface BossData {
 // Hash values are u64 fxhash::hash_bytes of the entity class name, transported
 // as decimal strings because JavaScript `number` cannot losslessly hold
 // integers above 2^53. Source of truth:
-// private/specs/contracts/parser-output.md Boss Type Identification table.
+// private/specs/contracts/parser-api.md Boss Type Identification table.
 const BOSS_NAME_HASH_MAP: Record<string, string> = {
   '12946736302082733589': 'Guardian',      // CNPC_TrooperBoss, custom_id=21
   '1942975293714691302':  'Walker',        // CNPC_Boss_Tier2, custom_id=28

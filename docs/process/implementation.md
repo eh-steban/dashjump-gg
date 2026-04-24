@@ -80,7 +80,7 @@ security, conventions) which applies to every unit of work.
 
 For each service boundary this feature crosses, update the relevant spec in `private/specs/contracts/`:
 
-- Parser output changes: update `parser-output.md` (owned by `rust-parser`)
+- Parser output changes: update `parser-api.md` (owned by `rust-parser`)
 - Backend API changes: update `backend-api.md` (owned by `backend-python`)
 
 Spec updates must include: field name, type, required/optional, and a notes column entry.
